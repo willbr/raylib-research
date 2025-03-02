@@ -9,7 +9,7 @@
 #define UNIT_RADIUS 1.0f
 #define UNIT_HEIGHT 2.0f
 #define TARGET_RADIUS 0.3f // Size of the target marker
-#define GROUND_SIZE 20.0f   // Size of the ground plane
+#define GROUND_SIZE 50.0f   // Increased ground size from 20.0f to 50.0f
 
 // Unit structure
 typedef struct {
@@ -126,7 +126,7 @@ void UpdateUnit(Unit* unit, Unit* units, int unitIndex, float deltaTime) {
 int main(void) {
     // Initialize window
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "3D Orthographic RTS");
-    SetTargetFPS(60);
+    SetTargetFPS(144);
     
     // Default window flags
     SetWindowState(FLAG_WINDOW_RESIZABLE);  // Make window resizable
@@ -134,7 +134,7 @@ int main(void) {
     
     // Initialize 3D camera (orthographic view)
     Camera camera = { 0 };
-    camera.position = (Vector3){ 10.0f, 10.0f, 10.0f };  // Camera position
+    camera.position = (Vector3){ 20.0f, 20.0f, 20.0f };  // Camera position - moved further back
     camera.target = (Vector3){ 0.0f, 0.0f, 0.0f };       // Camera looking at point
     camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };           // Camera up vector
     camera.fovy = 45.0f;                                 // Camera field-of-view Y
@@ -164,16 +164,30 @@ int main(void) {
     groundModel.materials[0] = groundMaterial;
 
     // Set orthographic camera scale
-    float cameraScale = 20.0f;  // Adjust this value to zoom in/out
+    float cameraScale = 40.0f;  // Starting with a more zoomed out view for larger ground
+    float minZoom = 5.0f;       // Minimum zoom level (more zoomed in)
+    float maxZoom = 100.0f;     // Maximum zoom level (more zoomed out) - increased further
+    float zoomIncrement = 3.0f; // How much to zoom per mouse wheel tick - increased for better control
     
     // Camera movement speed (units per second)
-    float cameraMoveSpeed = 10.0f;
+    float cameraMoveSpeed = 40.0f;  // Increased for faster navigation of larger map
 
     while (!WindowShouldClose()) {
         float deltaTime = GetFrameTime();
         
         // Camera panning with WASD
         Vector3 cameraMoveDir = {0};
+        
+        // Camera zooming with mouse wheel
+        float mouseWheelMove = GetMouseWheelMove();
+        if (mouseWheelMove != 0) {
+            // Decrease scale (zoom in) when scrolling up, increase (zoom out) when scrolling down
+            cameraScale -= mouseWheelMove * zoomIncrement;
+            
+            // Clamp zoom level to min and max values
+            if (cameraScale < minZoom) cameraScale = minZoom;
+            if (cameraScale > maxZoom) cameraScale = maxZoom;
+        }
         
         // Get camera right vector (for proper strafing)
         Vector3 cameraRight = Vector3CrossProduct(
@@ -241,7 +255,7 @@ int main(void) {
         float height = (float)GetScreenHeight();
         float aspect = width / height;
         
-        // Set the orthographic scale based on window size and desired zoom
+        // Set orthographic camera scale
         camera.fovy = cameraScale; 
         
         // Input handling
@@ -334,8 +348,35 @@ int main(void) {
         // Draw ground
         DrawModel(groundModel, (Vector3){ 0.0f, 0.0f, 0.0f }, 1.0f, WHITE);
         
-        // Draw grid on the ground for better perspective
-        DrawGrid(20, 1.0f);
+        // Draw enhanced grid lines for better visibility
+        // Draw primary grid in a darker gray
+        Color gridColor = GRAY;
+        float gridSpacing = 2.0f; // Space between grid lines
+        int gridLines = (int)(GROUND_SIZE / gridSpacing);
+        
+        // Draw primary grid lines
+        for (int i = -gridLines/2; i <= gridLines/2; i++) {
+            float pos = i * gridSpacing;
+            
+            // X-axis lines (along Z)
+            DrawLine3D(
+                (Vector3){pos, 0.01f, -GROUND_SIZE/2}, 
+                (Vector3){pos, 0.01f, GROUND_SIZE/2}, 
+                gridColor
+            );
+            
+            // Z-axis lines (along X)
+            DrawLine3D(
+                (Vector3){-GROUND_SIZE/2, 0.01f, pos}, 
+                (Vector3){GROUND_SIZE/2, 0.01f, pos}, 
+                gridColor
+            );
+        }
+        
+        // Draw major axes with more prominent color
+        Color axisColor = DARKGRAY;
+        DrawLine3D((Vector3){0, 0.02f, -GROUND_SIZE/2}, (Vector3){0, 0.02f, GROUND_SIZE/2}, axisColor); // Z axis
+        DrawLine3D((Vector3){-GROUND_SIZE/2, 0.02f, 0}, (Vector3){GROUND_SIZE/2, 0.02f, 0}, axisColor); // X axis
         
         // Draw units and their targets
         for (int i = 0; i < MAX_UNITS; i++) {
