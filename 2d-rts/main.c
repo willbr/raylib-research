@@ -125,20 +125,20 @@ void UpdateUnit(Unit* unit, Unit* units, int unitIndex, float deltaTime) {
 // Main entry point
 int main(void) {
     // Initialize window
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "3D Isometric RTS");
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "3D Orthographic RTS");
     SetTargetFPS(60);
     
     // Add keyboard shortcut for toggling fullscreen mode
     // Default window flags
     SetWindowState(FLAG_WINDOW_RESIZABLE);  // Make window resizable
     
-    // Initialize 3D camera (isometric view)
+    // Initialize 3D camera (orthographic view)
     Camera camera = { 0 };
     camera.position = (Vector3){ 10.0f, 10.0f, 10.0f };  // Camera position
     camera.target = (Vector3){ 0.0f, 0.0f, 0.0f };       // Camera looking at point
     camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };           // Camera up vector
     camera.fovy = 45.0f;                                 // Camera field-of-view Y
-    camera.projection = CAMERA_PERSPECTIVE;              // Camera projection type
+    camera.projection = CAMERA_ORTHOGRAPHIC;             // Camera projection type - CHANGED TO ORTHOGRAPHIC
     
     Unit units[MAX_UNITS];
     InitUnits(units);
@@ -163,8 +163,56 @@ int main(void) {
     groundMaterial.maps[MATERIAL_MAP_DIFFUSE].color = LIGHTGRAY;
     groundModel.materials[0] = groundMaterial;
 
+    // Set orthographic camera scale
+    float cameraScale = 20.0f;  // Adjust this value to zoom in/out
+    
+    // Camera movement speed (units per second)
+    float cameraMoveSpeed = 10.0f;
+
     while (!WindowShouldClose()) {
         float deltaTime = GetFrameTime();
+        
+        // Camera panning with WASD
+        Vector3 cameraMoveDir = {0};
+        
+        // Get camera right vector (for proper strafing)
+        Vector3 cameraRight = Vector3CrossProduct(
+            Vector3Subtract(camera.target, camera.position),
+            camera.up
+        );
+        cameraRight = Vector3Normalize(cameraRight);
+        
+        // Get camera forward vector in the xz plane (for proper forward/backward movement)
+        Vector3 cameraForward = Vector3Subtract(camera.target, camera.position);
+        cameraForward.y = 0.0f; // Lock to xz plane
+        cameraForward = Vector3Normalize(cameraForward);
+        
+        // Apply movement based on keys
+        if (IsKeyDown(KEY_W)) {
+            cameraMoveDir = Vector3Add(cameraMoveDir, cameraForward);
+        }
+        if (IsKeyDown(KEY_S)) {
+            cameraMoveDir = Vector3Subtract(cameraMoveDir, cameraForward);
+        }
+        if (IsKeyDown(KEY_D)) {
+            cameraMoveDir = Vector3Add(cameraMoveDir, cameraRight);
+        }
+        if (IsKeyDown(KEY_A)) {
+            cameraMoveDir = Vector3Subtract(cameraMoveDir, cameraRight);
+        }
+        
+        // Normalize movement direction if needed
+        if (Vector3Length(cameraMoveDir) > 0) {
+            cameraMoveDir = Vector3Normalize(cameraMoveDir);
+            
+            // Calculate movement distance
+            float moveDistance = cameraMoveSpeed * deltaTime;
+            Vector3 movement = Vector3Scale(cameraMoveDir, moveDistance);
+            
+            // Move both camera position and target together to maintain view direction
+            camera.position = Vector3Add(camera.position, movement);
+            camera.target = Vector3Add(camera.target, movement);
+        }
         
         // Check for maximize/fullscreen toggle
         if (IsKeyPressed(KEY_F11) || IsKeyPressed(KEY_F)) {
@@ -187,6 +235,14 @@ int main(void) {
                 MaximizeWindow();
             }
         }
+        
+        // Update orthographic scale with window size
+        float width = (float)GetScreenWidth();
+        float height = (float)GetScreenHeight();
+        float aspect = width / height;
+        
+        // Set the orthographic scale based on window size and desired zoom
+        camera.fovy = cameraScale; 
         
         // Input handling
         Vector2 mousePos = GetMousePosition();
