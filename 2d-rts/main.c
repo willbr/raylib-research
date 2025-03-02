@@ -128,9 +128,9 @@ int main(void) {
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "3D Orthographic RTS");
     SetTargetFPS(60);
     
-    // Add keyboard shortcut for toggling fullscreen mode
     // Default window flags
     SetWindowState(FLAG_WINDOW_RESIZABLE);  // Make window resizable
+    MaximizeWindow();  // Start with maximized window
     
     // Initialize 3D camera (orthographic view)
     Camera camera = { 0 };
