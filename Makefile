@@ -1,6 +1,6 @@
 CC := zig cc
 CFLAGS := -std=c99 -O2
-PROJECTS := fps rally 3rd-person rts soccer
+PROJECTS := fps rally 3rd-person rts soccer kart platformer zelda micromachines
 
 UNAME := $(shell uname)
 ifeq ($(UNAME), Darwin)
@@ -17,12 +17,19 @@ else
   EXT := .exe
 endif
 
-.PHONY: all clean $(PROJECTS)
+.PHONY: all clean run $(PROJECTS)
 
 all: $(PROJECTS)
 
 $(PROJECTS):
 	$(CC) $@/main.c -o $@/$@$(EXT) $(CFLAGS) $(RAYLIB_CFLAGS) $(RAYLIB_LIBS) $(PLATFORM_LIBS)
 
+run:
+ifndef GAME
+	$(error Usage: make run GAME=fps)
+endif
+	@$(MAKE) $(GAME)
+	./$(GAME)/$(GAME)$(EXT)
+
 clean:
-	rm -f fps/fps$(EXT) rally/rally$(EXT) 3rd-person/3rd-person$(EXT) rts/rts$(EXT)
+	rm -f $(foreach p,$(PROJECTS),$(p)/$(p)$(EXT))
