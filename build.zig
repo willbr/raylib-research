@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const projects = .{ "fps", "rally", "3rd-person", "rts", "soccer", "kart", "platformer", "zelda", "micromachines", "skate" };
+const projects = .{ "fps", "rally", "3rd-person", "rts", "soccer", "kart", "platformer", "zelda", "micromachines", "skate", "resi" };
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
