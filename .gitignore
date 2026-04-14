@@ -68,3 +68,8 @@ micromachines/micromachines
 skate/skate
 resi/resi
 wipeout/wipeout
+editor/editor
+
+# Editor generated files
+objects/
+*.m3d

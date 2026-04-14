@@ -1,6 +1,6 @@
 CC := zig cc
 CFLAGS := -std=c99 -O2
-PROJECTS := fps rally 3rd-person rts soccer kart platformer zelda micromachines skate resi wipeout
+PROJECTS := fps rally 3rd-person rts soccer kart platformer zelda micromachines skate resi wipeout editor
 
 UNAME := $(shell uname)
 ifeq ($(UNAME), Darwin)
