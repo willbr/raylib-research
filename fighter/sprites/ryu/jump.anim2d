@@ -3,80 +3,24 @@ loop false
 
 # Rising - tucked pose
 frame 0.2
-  back_shoe -6 -10
-  back_leg -8 -18
-  back_thigh -6 -28
-  front_shoe 6 -10
-  front_leg 8 -18
-  front_thigh 6 -28
-  belt 0 -34
-  torso 0 -46
-  gi_lapel 0 -40
-  gi_fold1 0 -46
-  gi_fold2 0 -46
-  back_arm -16 -44
-  back_sleeve -16 -52
-  back_wrap -16 -38
-  back_fist -16 -32
-  front_arm 16 -44
-  front_sleeve 16 -52
-  front_wrap 16 -38
-  front_fist 16 -32
-  neck 0 -56
-  head 0 -68
-  ear -14 -68
-  headband 0 -76
-  headband_tail1 -16 -70
-  headband_tail2 -20 -66
-  hair_base 0 -80
-  hair_spike1 0 -84
-  hair_spike2 -8 -82
-  hair_spike3 8 -82
-  eye_l_white -5 -68
-  eye_l_pupil -4 -68
-  eye_r_white 5 -68
-  eye_r_pupil 6 -68
-  brow_l -5 -72
-  brow_r 5 -72
-  mouth 0 -62
+  leg_back -8 -15
+  shoe_back -6 -10
+  leg_front 8 -15
+  shoe_front 6 -10
+  torso 0 -38
+  arm_back -16 -38
+  arm_front 16 -38
+  head 0 -63
   hurtbox -16 -84 32 84
 
 # Falling - extended pose
 frame 0.3
-  back_shoe -12 -4
-  back_leg -10 -18
-  back_thigh -8 -34
-  front_shoe 12 -4
-  front_leg 10 -18
-  front_thigh 8 -34
-  belt 0 -42
-  torso 0 -56
-  gi_lapel 0 -50
-  gi_fold1 0 -56
-  gi_fold2 0 -56
-  back_arm -20 -54
-  back_sleeve -20 -64
-  back_wrap -20 -46
-  back_fist -20 -40
-  front_arm 20 -54
-  front_sleeve 20 -64
-  front_wrap 20 -46
-  front_fist 20 -40
-  neck 0 -68
-  head 0 -82
-  ear -14 -82
-  headband 0 -90
-  headband_tail1 -16 -84
-  headband_tail2 -20 -80
-  hair_base 0 -94
-  hair_spike1 0 -98
-  hair_spike2 -8 -96
-  hair_spike3 8 -96
-  eye_l_white -5 -82
-  eye_l_pupil -4 -82
-  eye_r_white 5 -82
-  eye_r_pupil 6 -82
-  brow_l -5 -86
-  brow_r 5 -86
-  mouth 0 -76
+  leg_back -10 -18
+  shoe_back -12 -4
+  leg_front 10 -18
+  shoe_front 12 -4
+  torso 0 -47
+  arm_back -20 -47
+  arm_front 20 -47
+  head 0 -77
   hurtbox -20 -98 40 98

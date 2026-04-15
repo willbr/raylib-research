@@ -460,15 +460,18 @@ static inline void SpriteAnimDrawBoxes(SpriteAnimState *s, float x, float y, flo
 }
 
 // --- Puppet/Skeletal 2D animation system ---
-// Define a character once as named parts, animate by moving them per keyframe.
-// Parts not mentioned in a keyframe keep their previous position.
+// A rig is made of named sub-sprites (each a .spr2d file).
+// Animation keyframes position/rotate/scale each sub-sprite as a unit.
+// Typically ~8-10 parts per character (head, torso, arms, legs, etc.)
 
-#define MAX_RIG_PARTS 32
+#define MAX_RIG_PARTS 16
+#define MAX_RIG_SPRITE_PARTS 32  // max primitives per sub-sprite
 #define MAX_PUPPET_FRAMES 12
 
 typedef struct {
     char name[16];
-    Sprite2DPart shape;   // base shape centered at origin
+    Sprite2DPart parts[MAX_RIG_SPRITE_PARTS];  // the sub-sprite
+    int partCount;
 } RigPart;
 
 typedef struct {
@@ -510,55 +513,33 @@ typedef struct {
     PartPose resolved[MAX_RIG_PARTS];
 } PuppetState;
 
-// Load a rig from file:
-//   part shoe_l ellipse 0 0 6 3  70 50 30 255
-//   part torso rect 0 0 30 24  235 235 240 255
+// Load a rig from file. Each part references a .spr2d file:
+//   part head head.spr2d
+//   part torso torso.spr2d
+//   part arm_l arm.spr2d
+// Paths are relative to the rig file's directory.
 static inline int LoadPuppetRig(const char *filename, PuppetRig *rig) {
     FILE *f = fopen(filename, "r");
     if (!f) return 0;
     rig->partCount = 0;
+    // Get directory of rig file for relative paths
+    char dir[128] = {0};
+    strncpy(dir, filename, 127);
+    char *lastSlash = strrchr(dir, '/');
+    if (lastSlash) *(lastSlash + 1) = '\0';
+    else dir[0] = '\0';
+
     char line[256];
     while (fgets(line, sizeof(line), f) && rig->partCount < MAX_RIG_PARTS) {
-        if (line[0] == '#' || line[0] == '\n') continue;
-        char name[16], type[16];
-        float a1, a2, a3, a4;
-        int r, g, b, al;
-        if (sscanf(line, "part %15s %15s %f %f %f %f %d %d %d %d",
-                   name, type, &a1, &a2, &a3, &a4, &r, &g, &b, &al) >= 8) {
+        if (line[0] == '#' || line[0] == '\n' || line[0] == '\r') continue;
+        char name[16], sprFile[64];
+        if (sscanf(line, "part %15s %63s", name, sprFile) == 2) {
             RigPart *p = &rig->parts[rig->partCount];
             strncpy(p->name, name, 15);
-            p->shape.color = (Color){r, g, b, al};
-            p->shape.x = a1; p->shape.y = a2;
-            if (strcmp(type, "rect") == 0) {
-                p->shape.type = SP_RECT; p->shape.w = a3; p->shape.h = a4;
-            } else if (strcmp(type, "circle") == 0) {
-                p->shape.type = SP_CIRCLE; p->shape.w = a3;
-            } else if (strcmp(type, "ellipse") == 0) {
-                p->shape.type = SP_ELLIPSE; p->shape.w = a3; p->shape.extra2 = a4;
-            } else if (strcmp(type, "tri") == 0) {
-                p->shape.type = SP_TRIANGLE;
-                // tri needs 6 coords: x1 y1 x2 y2 x3 y3
-                float x2, y2, x3, y3;
-                if (sscanf(line, "part %*s tri %f %f %f %f %f %f %d %d %d %d",
-                           &a1, &a2, &a3, &a4, &x2, &y2, &r, &g, &b, &al) == 10) {
-                    p->shape.x = a1; p->shape.y = a2;
-                    p->shape.w = a3; p->shape.h = a4;
-                    p->shape.extra1 = x2; p->shape.extra2 = y2;
-                    p->shape.color = (Color){r, g, b, al};
-                }
-            } else if (strcmp(type, "line") == 0) {
-                p->shape.type = SP_LINE; p->shape.w = a3; p->shape.h = a4;
-                // line needs: x1 y1 x2 y2 thick
-                float thick;
-                if (sscanf(line, "part %*s line %f %f %f %f %f %d %d %d %d",
-                           &a1, &a2, &a3, &a4, &thick, &r, &g, &b, &al) == 9) {
-                    p->shape.x = a1; p->shape.y = a2;
-                    p->shape.w = a3; p->shape.h = a4;
-                    p->shape.extra1 = thick;
-                    p->shape.color = (Color){r, g, b, al};
-                }
-            }
-            rig->partCount++;
+            char fullPath[192];
+            snprintf(fullPath, sizeof(fullPath), "%s%s", dir, sprFile);
+            p->partCount = LoadSprite2D(fullPath, p->parts, MAX_RIG_SPRITE_PARTS);
+            if (p->partCount > 0) rig->partCount++;
         }
     }
     fclose(f);
@@ -692,39 +673,40 @@ static inline void PuppetUpdate(PuppetState *s, float dt) {
         s->resolved[i] = kf->poses[i];
 }
 
+// Draw a sub-sprite with rotation applied to each part's offset
+static inline void DrawSubSpriteRotated(Sprite2DPart *parts, int count,
+    float cx, float cy, float scale, float rotDeg, bool flip) {
+    float rad = rotDeg * PI / 180.0f;
+    if (flip) rad = -rad;
+    float cs = cosf(rad), sn = sinf(rad);
+    for (int i = 0; i < count; i++) {
+        Sprite2DPart p = parts[i];
+        // Flip X if needed
+        if (flip) {
+            p.x = -p.x;
+            if (p.type == SP_TRIANGLE) { p.w = -p.w; p.extra1 = -p.extra1; }
+            if (p.type == SP_LINE) p.w = -p.w;
+        }
+        // Rotate the part's offset around origin
+        if (rotDeg != 0) {
+            float rx = p.x * cs - p.y * sn;
+            float ry = p.x * sn + p.y * cs;
+            p.x = rx; p.y = ry;
+        }
+        DrawSprite2DPart(&p, cx, cy, scale);
+    }
+}
+
 static inline void PuppetDraw(PuppetState *s, float x, float y, float scale) {
     if (!s->rig || !s->anim) return;
     for (int i = 0; i < s->rig->partCount; i++) {
         PartPose *pose = &s->resolved[i];
         if (!pose->visible) continue;
-        Sprite2DPart shape = s->rig->parts[i].shape;
-        float px = pose->x, py = pose->y;
+        RigPart *rp = &s->rig->parts[i];
+        float px = s->flipped ? -pose->x : pose->x;
         float pscale = pose->scale * scale;
-        if (s->flipped) {
-            px = -px;
-            // Flip shape offsets
-            shape.x = -shape.x;
-            if (shape.type == SP_TRIANGLE) {
-                shape.w = -shape.w;
-                shape.extra1 = -shape.extra1;
-            }
-            if (shape.type == SP_LINE) shape.w = -shape.w;
-        }
-        // Apply rotation if needed
-        if (pose->rot != 0 && !s->flipped) {
-            float rad = pose->rot * PI / 180.0f;
-            float c = cosf(rad), sn = sinf(rad);
-            float ox = shape.x, oy = shape.y;
-            shape.x = ox * c - oy * sn;
-            shape.y = ox * sn + oy * c;
-        } else if (pose->rot != 0 && s->flipped) {
-            float rad = -pose->rot * PI / 180.0f;
-            float c = cosf(rad), sn = sinf(rad);
-            float ox = shape.x, oy = shape.y;
-            shape.x = ox * c - oy * sn;
-            shape.y = ox * sn + oy * c;
-        }
-        DrawSprite2DPart(&shape, x + px * scale, y + py * scale, pscale);
+        DrawSubSpriteRotated(rp->parts, rp->partCount,
+            x + px * scale, y + pose->y * scale, pscale, pose->rot, s->flipped);
     }
 }
 

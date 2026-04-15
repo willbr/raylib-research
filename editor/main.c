@@ -132,7 +132,7 @@ static const char *tileNames[] = {
 };
 
 // Editor modes
-typedef enum { MODE_TILES, MODE_OBJECTS, MODE_BUILD, MODE_BUILD2D } EditorMode;
+typedef enum { MODE_TILES, MODE_OBJECTS, MODE_BUILD, MODE_BUILD2D, MODE_PUPPET } EditorMode;
 
 // Build mode: compose a new object from primitives
 #define MAX_BUILD_PARTS 16
@@ -170,6 +170,95 @@ static bool drawing2d = false;     // currently dragging to create a shape
 static Vector2 drawStart = {0};    // where the drag started (screen coords)
 static int triVertex = 0;          // 0-2: which triangle vertex we're placing next
 static Vector3 buildCursor = {0, 0.5f, 0};  // where new parts spawn
+
+// --- Puppet editor state ---
+static PuppetRig puppetRig;
+static PuppetAnim puppetAnims[12];
+static int numPuppetAnims = 0;
+static int currentPuppetAnim = 0;
+static int currentPuppetFrame = 0;
+static int selectedPuppetPart = -1;
+static bool puppetPlaying = false;
+static PuppetState puppetPreview;
+static float puppetPlayTimer = 0;
+static char puppetRigPath[128] = {0};
+static char puppetAnimDir[128] = {0};
+static int puppetDragging = -1;  // part being dragged
+static Vector2 puppetDragStart = {0};
+static float puppetZoom = 3.0f;
+static Vector2 puppetPan = {0};
+
+// Names for puppet animations
+static const char *puppetAnimNames[] = {
+    "idle", "walk", "punch", "kick", "crouch",
+    "jump", "hit", "block", "hadouken", "win", "intro", "taunt"
+};
+static const int NUM_PUPPET_ANIM_NAMES = 12;
+
+void LoadPuppetForEdit(const char *rigPath) {
+    strncpy(puppetRigPath, rigPath, 127);
+    // Derive directory from rig path
+    strncpy(puppetAnimDir, rigPath, 127);
+    char *lastSlash = strrchr(puppetAnimDir, '/');
+    if (lastSlash) *(lastSlash + 1) = '\0';
+
+    LoadPuppetRig(rigPath, &puppetRig);
+    numPuppetAnims = 0;
+    for (int i = 0; i < NUM_PUPPET_ANIM_NAMES && numPuppetAnims < 12; i++) {
+        char path[128];
+        snprintf(path, sizeof(path), "%s%s.anim2d", puppetAnimDir, puppetAnimNames[i]);
+        if (LoadPuppetAnim(path, &puppetAnims[numPuppetAnims], &puppetRig) > 0) {
+            strncpy(puppetAnims[numPuppetAnims].name, puppetAnimNames[i], 31);
+            numPuppetAnims++;
+        }
+    }
+    // If no anims loaded, create a default idle with 1 frame
+    if (numPuppetAnims == 0) {
+        strncpy(puppetAnims[0].name, "idle", 31);
+        puppetAnims[0].frameCount = 1;
+        puppetAnims[0].loop = true;
+        puppetAnims[0].frames[0].duration = 0.15f;
+        puppetAnims[0].frames[0].hitboxCount = 0;
+        puppetAnims[0].frames[0].hurtboxCount = 0;
+        for (int i = 0; i < puppetRig.partCount; i++)
+            puppetAnims[0].frames[0].poses[i] = (PartPose){0, 0, 0, 1.0f, true};
+        numPuppetAnims = 1;
+    }
+    currentPuppetAnim = 0;
+    currentPuppetFrame = 0;
+    selectedPuppetPart = -1;
+    puppetPlaying = false;
+}
+
+void SavePuppetAnim(int animIdx) {
+    char path[128];
+    snprintf(path, sizeof(path), "%s%s.anim2d", puppetAnimDir, puppetAnims[animIdx].name);
+    FILE *f = fopen(path, "w");
+    if (!f) return;
+    PuppetAnim *a = &puppetAnims[animIdx];
+    fprintf(f, "# %s animation\n", a->name);
+    fprintf(f, "loop %s\n\n", a->loop ? "true" : "false");
+    for (int fr = 0; fr < a->frameCount; fr++) {
+        PuppetKeyframe *kf = &a->frames[fr];
+        fprintf(f, "frame %.2f\n", kf->duration);
+        for (int p = 0; p < puppetRig.partCount; p++) {
+            PartPose *pose = &kf->poses[p];
+            fprintf(f, "  %s %.0f %.0f", puppetRig.parts[p].name, pose->x, pose->y);
+            if (pose->rot != 0) fprintf(f, " rot %.0f", pose->rot);
+            if (pose->scale != 1.0f) fprintf(f, " scale %.2f", pose->scale);
+            if (!pose->visible) fprintf(f, " hide");
+            fprintf(f, "\n");
+        }
+        for (int h = 0; h < kf->hurtboxCount; h++)
+            fprintf(f, "  hurtbox %.0f %.0f %.0f %.0f\n",
+                kf->hurtboxes[h].x, kf->hurtboxes[h].y, kf->hurtboxes[h].w, kf->hurtboxes[h].h);
+        for (int h = 0; h < kf->hitboxCount; h++)
+            fprintf(f, "  hitbox %.0f %.0f %.0f %.0f\n",
+                kf->hitboxes[h].x, kf->hitboxes[h].y, kf->hitboxes[h].w, kf->hitboxes[h].h);
+        fprintf(f, "\n");
+    }
+    fclose(f);
+}
 
 // Text input state for naming
 static bool textEditing = false;
@@ -792,8 +881,8 @@ int main(void) {
             if (showModeMenu) modeMenuPos = GetMousePosition();
         }
         if (showModeMenu) {
-            const char *modeOpts[] = { "Tiles", "Objects", "Build 3D", "Build 2D" };
-            EditorMode modes[] = { MODE_TILES, MODE_OBJECTS, MODE_BUILD, MODE_BUILD2D };
+            const char *modeOpts[] = { "Tiles", "Objects", "Build 3D", "Build 2D", "Puppet" };
+            EditorMode modes[] = { MODE_TILES, MODE_OBJECTS, MODE_BUILD, MODE_BUILD2D, MODE_PUPPET };
             // Block other input while menu is open
         }
 
@@ -1774,7 +1863,7 @@ int main(void) {
             }
         }
 
-        if (mode != MODE_BUILD2D) {
+        if (mode != MODE_BUILD2D && mode != MODE_PUPPET) {
         BeginMode3D(camera);
             if (mode == MODE_BUILD) {
                 // Build mode: draw on a work surface
@@ -1887,10 +1976,10 @@ int main(void) {
             }
 
         EndMode3D();
-        } // end if (mode != MODE_BUILD2D)
+        } // end if (mode != MODE_BUILD2D && mode != MODE_PUPPET)
 
         // Sprite preview when holding shift with sprite selected
-        if (mode != MODE_BUILD2D && IsKeyDown(KEY_LEFT_SHIFT) && placingSprite &&
+        if (mode != MODE_BUILD2D && mode != MODE_PUPPET && IsKeyDown(KEY_LEFT_SHIFT) && placingSprite &&
             selectedSpriteFile >= 0 && selectedSpriteFile < numSpriteFiles &&
             hoverValid && !overUI) {
             float hy = Map3DHeightAt(&map, groundHit) + 1.0f;
@@ -2032,7 +2121,7 @@ int main(void) {
 
         // Mode indicator
         const char *modeLabel = mode == MODE_TILES ? "TILES" : (mode == MODE_OBJECTS ? "OBJECTS" :
-            (mode == MODE_BUILD ? "BUILD 3D" : "BUILD 2D"));
+            (mode == MODE_BUILD ? "BUILD 3D" : (mode == MODE_PUPPET ? "PUPPET" : "BUILD 2D")));
         DrawText(modeLabel, 10, 10, 20, GOLD);
         DrawText("[TAB] switch mode", 10, 32, 10, (Color){120,120,130,255});
 
@@ -2379,14 +2468,258 @@ int main(void) {
         }
 
         // Minimap
-        if (showMinimap && mode != MODE_BUILD && mode != MODE_BUILD2D)
+        // --- Puppet editor mode (2D overlay) ---
+        if (mode == MODE_PUPPET) {
+            int pw = sw, ph = sh;
+            float pcx = pw / 2.0f + puppetPan.x, pcy = ph * 0.65f + puppetPan.y;
+
+            // Background
+            DrawRectangle(0, 0, pw, ph, (Color){30, 30, 45, 255});
+            // Ground line
+            DrawLine(0, (int)pcy, pw, (int)pcy, (Color){80, 80, 100, 255});
+            // Center crosshair
+            DrawLine((int)pcx - 20, (int)pcy, (int)pcx + 20, (int)pcy, (Color){60, 60, 80, 150});
+            DrawLine((int)pcx, (int)pcy - 20, (int)pcx, (int)pcy + 20, (Color){60, 60, 80, 150});
+
+            if (puppetRig.partCount > 0 && numPuppetAnims > 0 && !textActive && !showModeMenu) {
+                PuppetAnim *ca = &puppetAnims[currentPuppetAnim];
+                // Clamp frame to valid range
+                if (ca->frameCount <= 0) ca->frameCount = 1;
+                if (currentPuppetFrame >= ca->frameCount) currentPuppetFrame = 0;
+                PuppetKeyframe *kf = &ca->frames[currentPuppetFrame];
+
+                // Playback
+                if (puppetPlaying && ca->frameCount > 1) {
+                    puppetPlayTimer += GetFrameTime();
+                    float dur = kf->duration > 0 ? kf->duration : 0.15f;
+                    if (puppetPlayTimer >= dur) {
+                        puppetPlayTimer -= dur;
+                        currentPuppetFrame = (currentPuppetFrame + 1) % ca->frameCount;
+                        kf = &ca->frames[currentPuppetFrame];
+                    }
+                }
+
+                // Draw puppet at current frame
+                PuppetState ps = {0};
+                ps.rig = &puppetRig;
+                ps.anim = ca;
+                ps.currentFrame = currentPuppetFrame;
+                for (int i = 0; i < puppetRig.partCount; i++)
+                    ps.resolved[i] = kf->poses[i];
+                PuppetDraw(&ps, pcx, pcy, puppetZoom);
+
+                // Draw hitboxes/hurtboxes
+                PuppetDrawBoxes(&ps, pcx, pcy, puppetZoom);
+
+                // Part handles (circles at each part position)
+                if (!puppetPlaying) {
+                    for (int i = 0; i < puppetRig.partCount; i++) {
+                        if (!kf->poses[i].visible) continue;
+                        float hx = pcx + kf->poses[i].x * puppetZoom;
+                        float hy = pcy + kf->poses[i].y * puppetZoom;
+                        Color hc = (i == selectedPuppetPart) ? GOLD : (Color){150, 150, 200, 150};
+                        DrawCircleLines(hx, hy, 6, hc);
+                        if (i == selectedPuppetPart)
+                            DrawCircle(hx, hy, 4, (Color){255, 220, 50, 100});
+                    }
+
+                    // Click to select part
+                    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && mouse.x > 200) {
+                        selectedPuppetPart = -1;
+                        float bestD = 20.0f;
+                        for (int i = 0; i < puppetRig.partCount; i++) {
+                            if (!kf->poses[i].visible) continue;
+                            float hx = pcx + kf->poses[i].x * puppetZoom;
+                            float hy = pcy + kf->poses[i].y * puppetZoom;
+                            float d = Vector2Distance(mouse, (Vector2){hx, hy});
+                            if (d < bestD) { bestD = d; selectedPuppetPart = i; }
+                        }
+                        if (selectedPuppetPart >= 0) {
+                            puppetDragging = selectedPuppetPart;
+                            puppetDragStart = mouse;
+                        }
+                    }
+
+                    // Drag to move part
+                    if (puppetDragging >= 0 && IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+                        Vector2 delta = GetMouseDelta();
+                        kf->poses[puppetDragging].x += delta.x / puppetZoom;
+                        kf->poses[puppetDragging].y += delta.y / puppetZoom;
+                    }
+                    if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) puppetDragging = -1;
+
+                    // Scroll to zoom
+                    float wheel = GetMouseWheelMove();
+                    if (wheel != 0 && mouse.x > 200) {
+                        puppetZoom += wheel * 0.3f;
+                        if (puppetZoom < 1.0f) puppetZoom = 1.0f;
+                        if (puppetZoom > 8.0f) puppetZoom = 8.0f;
+                    }
+
+                    // Pan with middle mouse
+                    if (IsMouseButtonDown(MOUSE_MIDDLE_BUTTON)) {
+                        Vector2 delta = GetMouseDelta();
+                        puppetPan.x += delta.x;
+                        puppetPan.y += delta.y;
+                    }
+
+                    // Keyboard shortcuts
+                    if (IsKeyPressed(KEY_LEFT) && currentPuppetFrame > 0) currentPuppetFrame--;
+                    if (IsKeyPressed(KEY_RIGHT) && currentPuppetFrame < ca->frameCount - 1) currentPuppetFrame++;
+
+                    // Add frame (duplicate current)
+                    if (IsKeyPressed(KEY_N) && ca->frameCount < MAX_PUPPET_FRAMES) {
+                        int nf = ca->frameCount;
+                        ca->frames[nf] = ca->frames[currentPuppetFrame]; // copy current
+                        ca->frameCount++;
+                        currentPuppetFrame = nf;
+                    }
+
+                    // Delete frame
+                    if (IsKeyPressed(KEY_DELETE) && ca->frameCount > 1) {
+                        for (int i = currentPuppetFrame; i < ca->frameCount - 1; i++)
+                            ca->frames[i] = ca->frames[i + 1];
+                        ca->frameCount--;
+                        if (currentPuppetFrame >= ca->frameCount) currentPuppetFrame = ca->frameCount - 1;
+                    }
+
+                    // Toggle part visibility
+                    if (IsKeyPressed(KEY_H) && selectedPuppetPart >= 0)
+                        kf->poses[selectedPuppetPart].visible = !kf->poses[selectedPuppetPart].visible;
+
+                    // Save with Ctrl+S
+                    if ((IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_LEFT_SUPER)) && IsKeyPressed(KEY_S))
+                        SavePuppetAnim(currentPuppetAnim);
+                }
+                // Play/pause toggle (works whether playing or not)
+                if (IsKeyPressed(KEY_SPACE)) puppetPlaying = !puppetPlaying;
+            }
+
+            // --- Puppet mode UI panel (left side) ---
+            DrawRectangle(0, 0, 200, sh, (Color){25, 25, 35, 240});
+            DrawText("PUPPET EDITOR", 10, 10, 14, WHITE);
+
+            // Rig info
+            if (puppetRig.partCount > 0) {
+                DrawText(TextFormat("Rig: %d parts", puppetRig.partCount), 10, 30, 10, (Color){150,150,150,255});
+            } else {
+                DrawText("No rig loaded!", 10, 30, 10, RED);
+                DrawText("Place a .rig2d file", 10, 44, 10, (Color){150,150,150,255});
+                DrawText("and restart editor", 10, 56, 10, (Color){150,150,150,255});
+            }
+
+            // Animation list
+            DrawText("Animations:", 10, 55, 10, WHITE);
+            for (int i = 0; i < numPuppetAnims; i++) {
+                int ay = 70 + i * 20;
+                bool sel = (i == currentPuppetAnim);
+                DrawRectangle(8, ay, 184, 18, sel ? (Color){50,50,70,255} : (Color){30,30,45,255});
+                if (sel) DrawRectangleLinesEx((Rectangle){8, ay, 184, 18}, 1, GOLD);
+                if (CheckCollisionPointRec(mouse, (Rectangle){8, ay, 184, 18}) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                    currentPuppetAnim = i;
+                    currentPuppetFrame = 0;
+                    puppetPlaying = false;
+                    puppetPlayTimer = 0;
+                }
+                DrawText(puppetAnims[i].name, 14, ay + 3, 12,
+                    sel ? WHITE : (Color){150,150,150,255});
+                DrawText(TextFormat("%df", puppetAnims[i].frameCount), 160, ay + 3, 10,
+                    (Color){100,100,120,255});
+            }
+
+            // Frame info
+            if (numPuppetAnims > 0) {
+                PuppetAnim *ca = &puppetAnims[currentPuppetAnim];
+                PuppetKeyframe *kf = &ca->frames[currentPuppetFrame];
+                int fy = 76 + numPuppetAnims * 20;
+                DrawText(TextFormat("Frame: %d/%d", currentPuppetFrame + 1, ca->frameCount), 10, fy, 12, WHITE);
+                DrawText(TextFormat("Duration: %.2fs", kf->duration), 10, fy + 16, 10, (Color){150,150,180,255});
+                DrawText(TextFormat("Loop: %s", ca->loop ? "yes" : "no"), 10, fy + 30, 10, (Color){150,150,180,255});
+
+                // Parts list
+                int partsY = fy + 48;
+                DrawText("Parts:", 10, partsY, 10, WHITE);
+                partsY += 14;
+                static int partsScroll = 0;
+                int visibleParts = (sh - partsY - 160) / 16;
+                if (visibleParts < 4) visibleParts = 4;
+                // Scroll with mouse wheel when hovering parts list
+                if (mouse.x < 200 && mouse.y > partsY && mouse.y < partsY + visibleParts * 16) {
+                    float w = GetMouseWheelMove();
+                    if (w != 0) {
+                        partsScroll -= (int)w * 2;
+                        if (partsScroll < 0) partsScroll = 0;
+                        if (partsScroll > puppetRig.partCount - visibleParts)
+                            partsScroll = puppetRig.partCount - visibleParts;
+                        if (partsScroll < 0) partsScroll = 0;
+                    }
+                }
+                for (int i = partsScroll; i < puppetRig.partCount && i < partsScroll + visibleParts; i++) {
+                    int py2 = partsY + (i - partsScroll) * 16;
+                    bool sel = (i == selectedPuppetPart);
+                    bool vis = kf->poses[i].visible;
+                    Rectangle pr = {8, py2, 184, 14};
+                    bool hov = CheckCollisionPointRec(mouse, pr);
+                    Color bg = sel ? (Color){60,55,30,255} : (hov ? (Color){40,40,55,255} : (Color){28,28,40,255});
+                    DrawRectangleRec(pr, bg);
+                    if (sel) DrawRectangleLinesEx(pr, 1, GOLD);
+                    // Click to select
+                    if (hov && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) selectedPuppetPart = i;
+                    // Part name + type
+                    const char *typeName = "";
+                    Color nameCol = vis ? (sel ? WHITE : (Color){180,180,180,255}) : (Color){80,80,80,255};
+                    DrawText(TextFormat("%dp %s", puppetRig.parts[i].partCount, puppetRig.parts[i].name), 12, py2 + 1, 10, nameCol);
+                    // Color swatch from first primitive
+                    if (puppetRig.parts[i].partCount > 0)
+                        DrawRectangle(170, py2 + 2, 10, 10, puppetRig.parts[i].parts[0].color);
+                    DrawRectangleLines(170, py2 + 2, 10, 10, (Color){60,60,60,255});
+                }
+                // Scroll indicator
+                if (puppetRig.partCount > visibleParts) {
+                    float scrollPct = (float)partsScroll / (puppetRig.partCount - visibleParts);
+                    int barH2 = visibleParts * 16;
+                    int thumbH = barH2 * visibleParts / puppetRig.partCount;
+                    if (thumbH < 10) thumbH = 10;
+                    DrawRectangle(194, partsY + (int)(scrollPct * (barH2 - thumbH)), 4, thumbH, (Color){80,80,100,255});
+                }
+
+                // Selected part detail
+                if (selectedPuppetPart >= 0 && selectedPuppetPart < puppetRig.partCount) {
+                    PartPose *pose = &kf->poses[selectedPuppetPart];
+                    int dy = partsY + visibleParts * 16 + 6;
+                    DrawRectangle(8, dy, 184, 56, (Color){35,35,50,255});
+                    DrawRectangleLinesEx((Rectangle){8, dy, 184, 56}, 1, GOLD);
+                    DrawText(puppetRig.parts[selectedPuppetPart].name, 14, dy + 4, 12, GOLD);
+                    DrawText(TextFormat("Pos: %.0f, %.0f", pose->x, pose->y), 14, dy + 18, 10, WHITE);
+                    DrawText(TextFormat("Rot: %.0f  Scale: %.1f", pose->rot, pose->scale), 14, dy + 30, 10, (Color){180,180,200,255});
+                    DrawText(pose->visible ? "Visible [H]" : "HIDDEN [H]", 14, dy + 42, 10,
+                        pose->visible ? GREEN : RED);
+                }
+            }
+
+            // Controls help
+            DrawText("[SPACE] Play/Pause", 10, sh - 130, 10, (Color){100,100,120,255});
+            DrawText("[LEFT/RIGHT] Frames", 10, sh - 116, 10, (Color){100,100,120,255});
+            DrawText("[N] New frame", 10, sh - 102, 10, (Color){100,100,120,255});
+            DrawText("[DEL] Delete frame", 10, sh - 88, 10, (Color){100,100,120,255});
+            DrawText("[H] Toggle part vis", 10, sh - 74, 10, (Color){100,100,120,255});
+            DrawText("[Ctrl+S] Save anim", 10, sh - 60, 10, GOLD);
+            DrawText("Scroll: zoom", 10, sh - 46, 10, (Color){100,100,120,255});
+            DrawText("Mid-click: pan", 10, sh - 32, 10, (Color){100,100,120,255});
+
+            // Playing indicator
+            if (puppetPlaying)
+                DrawText("PLAYING", sw - 100, 10, 16, GREEN);
+        }
+
+        if (showMinimap && mode != MODE_BUILD && mode != MODE_BUILD2D && mode != MODE_PUPPET)
             Map3DDraw2D(&map, sw - EDITOR_MAP_W * 6 - 10, 10, 6);
 
         // Mode selection popup menu
         if (showModeMenu) {
-            const char *modeOpts[] = { "Tiles", "Objects", "Build 3D", "Build 2D" };
-            EditorMode modes[] = { MODE_TILES, MODE_OBJECTS, MODE_BUILD, MODE_BUILD2D };
-            int menuW = 120, itemH = 28, menuH = 4 * itemH + 8;
+            const char *modeOpts[] = { "Tiles", "Objects", "Build 3D", "Build 2D", "Puppet" };
+            EditorMode modes[] = { MODE_TILES, MODE_OBJECTS, MODE_BUILD, MODE_BUILD2D, MODE_PUPPET };
+            int menuW = 120, itemH = 28, menuH = 5 * itemH + 8;
             int mx = (int)modeMenuPos.x, my = (int)modeMenuPos.y;
             // Keep on screen
             if (mx + menuW > sw) mx = sw - menuW;
@@ -2395,7 +2728,7 @@ int main(void) {
             DrawRectangle(mx, my, menuW, menuH, (Color){25, 25, 35, 240});
             DrawRectangleLinesEx((Rectangle){mx, my, menuW, menuH}, 1, (Color){100, 90, 70, 255});
 
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < 5; i++) {
                 int iy = my + 4 + i * itemH;
                 Rectangle itemRect = { mx + 2, iy, menuW - 4, itemH - 2 };
                 bool hov = CheckCollisionPointRec(mouse, itemRect);
@@ -2423,6 +2756,13 @@ int main(void) {
                         camDist = 12.0f;
                     } else if (mode == MODE_BUILD2D) {
                         // No camera changes needed for 2D
+                    } else if (mode == MODE_PUPPET) {
+                        // Try loading rig files from known locations
+                        if (puppetRig.partCount == 0) {
+                            // Try fighter rigs
+                            if (LoadPuppetRig("fighter/sprites/ryu/ryu.rig2d", &puppetRig) > 0)
+                                LoadPuppetForEdit("fighter/sprites/ryu/ryu.rig2d");
+                        }
                     } else if (prev == MODE_BUILD || prev == MODE_BUILD2D) {
                         camFocus = (Vector3){ EDITOR_MAP_W * TILE_SZ / 2, 0, EDITOR_MAP_H * TILE_SZ / 2 };
                         camDist = 30.0f;
