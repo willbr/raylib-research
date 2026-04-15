@@ -242,7 +242,7 @@ int main(void) {
             // --- Mouse look (always on) ---
             Vector2 md = GetMouseDelta();
             camYaw -= md.x * 0.003f;
-            camPitch -= md.y * 0.003f;
+            camPitch += md.y * 0.003f;
             if (camPitch < -1.2f) camPitch = -1.2f;
             if (camPitch > 1.2f) camPitch = 1.2f;
 
@@ -260,8 +260,8 @@ int main(void) {
             if (player.crouching) speed *= 0.5f;
 
             Vector3 move = {0};
-            if (IsKeyDown(KEY_W)) move = Vector3Add(move, Vector3Scale(camFwd, speed));
-            if (IsKeyDown(KEY_S)) move = Vector3Add(move, Vector3Scale(camFwd, -speed));
+            if (IsKeyDown(KEY_W)) move = Vector3Add(move, Vector3Scale(camFwd, -speed));
+            if (IsKeyDown(KEY_S)) move = Vector3Add(move, Vector3Scale(camFwd, speed));
             if (IsKeyDown(KEY_A)) move = Vector3Add(move, Vector3Scale(camRight, -speed));
             if (IsKeyDown(KEY_D)) move = Vector3Add(move, Vector3Scale(camRight, speed));
 
@@ -442,6 +442,27 @@ int main(void) {
         Vector3 shoulderVec = {cosf(camYaw), 0, -sinf(camYaw)};
         camOffset = Vector3Add(camOffset, Vector3Scale(shoulderVec, curShoulder));
         camera.position = Vector3Add(player.pos, camOffset);
+        // Camera wall collision — pull camera closer if it would clip through geometry
+        {
+            Vector3 playerEye = {player.pos.x, player.pos.y + eyeH, player.pos.z};
+            Vector3 camDir = Vector3Subtract(camera.position, playerEye);
+            float camLen = Vector3Length(camDir);
+            if (camLen > 0.1f) {
+                Vector3 camStep = Vector3Scale(camDir, 1.0f / camLen);
+                float safeDist = camLen;
+                for (float t = 0.3f; t < camLen; t += 0.2f) {
+                    Vector3 testPos = Vector3Add(playerEye, Vector3Scale(camStep, t));
+                    if (CheckWallCol(testPos, 0.15f)) {
+                        safeDist = t - 0.3f;
+                        if (safeDist < 0.5f) safeDist = 0.5f;
+                        break;
+                    }
+                }
+                if (safeDist < camLen) {
+                    camera.position = Vector3Add(playerEye, Vector3Scale(camStep, safeDist));
+                }
+            }
+        }
         camera.position.x += shOff.x;
         camera.position.y += shOff.y;
 
