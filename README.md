@@ -60,10 +60,12 @@ All formats are human-readable text files editable in any text editor:
 Requires a Zig compiler and raylib installed.
 
 ```sh
-make all          # build everything
-make fps          # build one project
-make clean        # remove binaries
+zig build             # build all projects
+zig build fps         # build one project
+zig build run-fps     # build and run
 ```
+
+Outputs to `zig-out/bin/`. Run games from the project root so they can find asset files.
 
 On macOS, install dependencies with:
 ```sh

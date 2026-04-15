@@ -42,12 +42,15 @@ Multi-mode editor with:
 
 ## Build
 
-`zig cc` as the C compiler. Makefile with pkg-config on macOS, vcpkg on Windows:
+Uses Zig's build system (`build.zig`). Zig cc is the C compiler.
+
 ```
-make all          # build everything
-make fps          # build one project
-make clean        # remove binaries
+zig build             # build all projects
+zig build fps         # build one project
+zig build run-fps     # build and run
 ```
+
+Outputs go to `zig-out/bin/`. Run games from the project root so they can find asset files.
 
 **Dependencies**: Zig compiler, raylib (Homebrew on macOS, vcpkg on Windows).
 
