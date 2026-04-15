@@ -184,6 +184,23 @@ static int selectedPrefab = 0;
 static int selectedObject = -1;
 static GizmoMode gizmoMode = GIZMO_MOVE;
 static int draggingAxis = -1;
+
+// Compute screen-space gizmo endpoints for a world-space center.
+// Returns arm length in pixels and fills axisEnds[3] with screen positions.
+static float GizmoScreenEnds(Vector3 center, Camera3D cam, Vector2 *axisEnds) {
+    int sw2 = GetScreenWidth(), sh2 = GetScreenHeight();
+    float armLen = (float)(sw2 < sh2 ? sw2 : sh2) * 0.08f;
+    Vector2 sc = GetWorldToScreen(center, cam);
+    Vector3 dirs[3] = {{1,0,0},{0,1,0},{0,0,1}};
+    for (int i = 0; i < 3; i++) {
+        Vector2 wp = GetWorldToScreen((Vector3){center.x+dirs[i].x, center.y+dirs[i].y, center.z+dirs[i].z}, cam);
+        Vector2 d = Vector2Subtract(wp, sc);
+        float len = Vector2Length(d);
+        if (len > 0) d = Vector2Scale(d, armLen / len);
+        axisEnds[i] = Vector2Add(sc, d);
+    }
+    return armLen;
+}
 static bool showExport = false;
 static bool showGrid = true;
 static bool showMinimap = true;
@@ -457,13 +474,24 @@ void InitEditor(void) {
     prefabs[5].parts = lampParts;   prefabs[5].partCount = sizeof(lampParts)/sizeof(Part);
     prefabs[6].parts = bushParts;   prefabs[6].partCount = sizeof(bushParts)/sizeof(Part);
 
-    // Create objects/ directory and save built-in prefabs as files
+    // Create objects/ directory and save/load built-in prefabs
     MakeDirectory("objects");
     for (int i = 0; i < numPrefabs; i++) {
         char path[64];
         snprintf(path, sizeof(path), "objects/%s.obj3d", prefabs[i].name);
         for (char *c = path + 8; *c && *c != '.'; c++) if (*c == ' ') *c = '_';
-        if (!FileExists(path)) SavePrefabFile(i);
+        if (!FileExists(path)) {
+            SavePrefabFile(i);
+        } else {
+            // Load edited parts from file, replacing hardcoded defaults
+            Part *dest = &customPartsPool[customPartsUsed];
+            int loaded = LoadPrefabFile(prefabs[i].name, dest, MAX_CUSTOM_PARTS - customPartsUsed);
+            if (loaded > 0) {
+                prefabs[i].parts = dest;
+                prefabs[i].partCount = loaded;
+                customPartsUsed += loaded;
+            }
+        }
     }
 
     // Try loading the map from file, otherwise start with grass
@@ -603,10 +631,16 @@ int main(void) {
             if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
                 Vector3 orbitTarget = camFocus;
                 bool hasTarget = false;
-                if (mode == MODE_OBJECTS && selectedObject >= 0 && selectedObject < numPlaced && placed[selectedObject].active) {
+                if (mode == MODE_OBJECTS && selectedSprite >= 0 && selectedSprite < numPlacedSprites && placedSprites[selectedSprite].active) {
+                    orbitTarget = placedSprites[selectedSprite].pos;
+                    hasTarget = true;
+                } else if (mode == MODE_OBJECTS && selectedObject >= 0 && selectedObject < numPlaced && placed[selectedObject].active) {
                     orbitTarget = placed[selectedObject].pos;
                     PrefabDef *opf = &prefabs[placed[selectedObject].prefabIdx];
                     orbitTarget.y += PrefabCenterY(opf->parts, opf->partCount, placed[selectedObject].scale);
+                    hasTarget = true;
+                } else if (mode == MODE_BUILD && buildObj.selectedSprite >= 0 && buildObj.selectedSprite < buildObj.spriteCount) {
+                    orbitTarget = buildObj.sprites[buildObj.selectedSprite].offset;
                     hasTarget = true;
                 } else if (mode == MODE_BUILD && buildObj.selected >= 0 && buildObj.selected < buildObj.count) {
                     orbitTarget = buildObj.parts[buildObj.selected].offset;
@@ -741,25 +775,22 @@ int main(void) {
             if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !overUI &&
                 selectedSprite >= 0 && selectedSprite < numPlacedSprites && placedSprites[selectedSprite].active) {
                 PlacedSprite2D *ss = &placedSprites[selectedSprite];
-                float gLen = 1.5f;
                 Vector2 screenCenter = GetWorldToScreen(ss->pos, camera);
+                Vector2 gEnds[3];
+                float gArm = GizmoScreenEnds(ss->pos, camera, gEnds);
+                float hitR = gArm * 0.25f;
+                if (hitR < 12) hitR = 12;
                 if (gizmoMode == GIZMO_ROTATE) {
-                    if (Vector2Distance(mouse, screenCenter) < 60.0f) {
+                    if (Vector2Distance(mouse, screenCenter) < gArm + hitR) {
                         draggingAxis = 0; clickedGizmo = true;
                     }
                 } else {
-                    Vector3 gizmoEnd[3] = {
-                        { ss->pos.x + gLen, ss->pos.y, ss->pos.z },
-                        { ss->pos.x, ss->pos.y + gLen, ss->pos.z },
-                        { ss->pos.x, ss->pos.y, ss->pos.z + gLen },
-                    };
                     for (int ax = 0; ax < 3; ax++) {
-                        Vector2 screenPt = GetWorldToScreen(gizmoEnd[ax], camera);
-                        if (Vector2Distance(mouse, screenPt) < 20.0f) {
+                        if (Vector2Distance(mouse, gEnds[ax]) < hitR) {
                             draggingAxis = ax; clickedGizmo = true; break;
                         }
                     }
-                    if (!clickedGizmo && Vector2Distance(mouse, screenCenter) < 15.0f) {
+                    if (!clickedGizmo && Vector2Distance(mouse, screenCenter) < hitR) {
                         draggingAxis = 3; clickedGizmo = true;
                     }
                 }
@@ -769,37 +800,29 @@ int main(void) {
                 selectedObject >= 0 && placed[selectedObject].active) {
                 PlacedObject *sel = &placed[selectedObject];
                 PrefabDef *gpf = &prefabs[sel->prefabIdx];
-                float avgS = (sel->scale.x + sel->scale.y + sel->scale.z) / 3.0f;
-                float objRadius = PrefabCenterY(gpf->parts, gpf->partCount, sel->scale) * 2.0f;
-                if (objRadius < 0.5f) objRadius = 0.5f;
-                float gLen = objRadius + 0.8f;
                 float gy = sel->pos.y + PrefabCenterY(gpf->parts, gpf->partCount, sel->scale);
-                Vector2 screenCenter = GetWorldToScreen(
-                    (Vector3){sel->pos.x, gy, sel->pos.z}, camera);
+                Vector3 gCtr = {sel->pos.x, gy, sel->pos.z};
+                Vector2 screenCenter = GetWorldToScreen(gCtr, camera);
+                Vector2 gEnds[3];
+                float gArm = GizmoScreenEnds(gCtr, camera, gEnds);
+                float hitR = gArm * 0.25f;
+                if (hitR < 12) hitR = 12;
 
                 if (gizmoMode == GIZMO_ROTATE) {
-                    // Rotate: click anywhere near the object to start rotating
-                    if (Vector2Distance(mouse, screenCenter) < 60.0f) {
+                    if (Vector2Distance(mouse, screenCenter) < gArm + hitR) {
                         draggingAxis = 0;
                         clickedGizmo = true;
                     }
                 } else {
-                    // Move/Scale: check axis endpoints
-                    Vector3 gizmoEnd[3] = {
-                        { sel->pos.x + gLen, gy, sel->pos.z },
-                        { sel->pos.x, gy + gLen, sel->pos.z },
-                        { sel->pos.x, gy, sel->pos.z + gLen },
-                    };
                     for (int ax = 0; ax < 3; ax++) {
-                        Vector2 screenPt = GetWorldToScreen(gizmoEnd[ax], camera);
-                        if (Vector2Distance(mouse, screenPt) < 20.0f) {
+                        if (Vector2Distance(mouse, gEnds[ax]) < hitR) {
                             draggingAxis = ax;
                             clickedGizmo = true;
                             break;
                         }
                     }
                     // Center point: ground plane drag
-                    if (!clickedGizmo && Vector2Distance(mouse, screenCenter) < 15.0f) {
+                    if (!clickedGizmo && Vector2Distance(mouse, screenCenter) < hitR) {
                         draggingAxis = 3;
                         clickedGizmo = true;
                     }
@@ -1050,38 +1073,31 @@ int main(void) {
                 if (buildObj.selected >= 0) {
                     Part *sp = &buildObj.parts[buildObj.selected];
                     float gy = sp->offset.y + (sp->type == PART_CYLINDER ? sp->size.y * 0.5f : 0);
-                    float partR = fmaxf(fmaxf(sp->size.x, sp->size.y), sp->size.z);
-                    if (partR < 0.3f) partR = 0.3f;
-                    float gLen = partR + 0.5f;
-                    Vector3 ends[3] = {
-                        {sp->offset.x + gLen, gy, sp->offset.z},
-                        {sp->offset.x, gy + gLen, sp->offset.z},
-                        {sp->offset.x, gy, sp->offset.z + gLen},
-                    };
+                    Vector3 gCtr = {sp->offset.x, gy, sp->offset.z};
+                    Vector2 gCenter2 = GetWorldToScreen(gCtr, camera);
+                    Vector2 gEnds[3];
+                    float gArm = GizmoScreenEnds(gCtr, camera, gEnds);
+                    float hitR = gArm * 0.25f;
+                    if (hitR < 12) hitR = 12;
                     for (int ax = 0; ax < 3; ax++) {
-                        Vector2 sp2 = GetWorldToScreen(ends[ax], camera);
-                        if (Vector2Distance(mouse, sp2) < 20) { draggingAxis = ax; hitGizmo = true; break; }
+                        if (Vector2Distance(mouse, gEnds[ax]) < hitR) { draggingAxis = ax; hitGizmo = true; break; }
                     }
-                    if (!hitGizmo) {
-                        Vector2 cp = GetWorldToScreen((Vector3){sp->offset.x, gy, sp->offset.z}, camera);
-                        if (Vector2Distance(mouse, cp) < 15) { draggingAxis = 3; hitGizmo = true; }
+                    if (!hitGizmo && Vector2Distance(mouse, gCenter2) < hitR) {
+                        draggingAxis = 3; hitGizmo = true;
                     }
                 }
                 if (!hitGizmo && buildObj.selectedSprite >= 0) {
                     // Check gizmo on selected attached sprite
                     AttachedSprite *as = &buildObj.sprites[buildObj.selectedSprite];
-                    float gLen = 1.5f;
                     Vector2 sc2 = GetWorldToScreen(as->offset, camera);
-                    Vector3 ends2[3] = {
-                        {as->offset.x + gLen, as->offset.y, as->offset.z},
-                        {as->offset.x, as->offset.y + gLen, as->offset.z},
-                        {as->offset.x, as->offset.y, as->offset.z + gLen},
-                    };
+                    Vector2 gEnds[3];
+                    float gArm = GizmoScreenEnds(as->offset, camera, gEnds);
+                    float hitR = gArm * 0.25f;
+                    if (hitR < 12) hitR = 12;
                     for (int ax = 0; ax < 3; ax++) {
-                        Vector2 ep = GetWorldToScreen(ends2[ax], camera);
-                        if (Vector2Distance(mouse, ep) < 20) { draggingAxis = ax; hitGizmo = true; break; }
+                        if (Vector2Distance(mouse, gEnds[ax]) < hitR) { draggingAxis = ax; hitGizmo = true; break; }
                     }
-                    if (!hitGizmo && Vector2Distance(mouse, sc2) < 15) { draggingAxis = 3; hitGizmo = true; }
+                    if (!hitGizmo && Vector2Distance(mouse, sc2) < hitR) { draggingAxis = 3; hitGizmo = true; }
                 }
                 if (!hitGizmo) {
                     // Select nearest part or attached sprite using screen-space distance
@@ -1803,50 +1819,46 @@ int main(void) {
         // --- Gizmo overlay (2D screen-space, guaranteed on top) ---
         {
             Vector3 gCenter = {0};
-            float gLen = 0;
             bool drawGizmo = false;
             float objRotY = 0;
 
             if (mode == MODE_OBJECTS && selectedSprite >= 0 && selectedSprite < numPlacedSprites && placedSprites[selectedSprite].active) {
-                PlacedSprite2D *ss = &placedSprites[selectedSprite];
-                gCenter = ss->pos;
-                gLen = 1.5f;
+                gCenter = placedSprites[selectedSprite].pos;
                 drawGizmo = true;
             } else if (mode == MODE_OBJECTS && selectedObject >= 0 && selectedObject < numPlaced && placed[selectedObject].active) {
                 PlacedObject *sel = &placed[selectedObject];
                 PrefabDef *gpf2 = &prefabs[sel->prefabIdx];
                 gCenter = sel->pos;
                 gCenter.y += PrefabCenterY(gpf2->parts, gpf2->partCount, sel->scale);
-                float objR = PrefabCenterY(gpf2->parts, gpf2->partCount, sel->scale) * 2.0f;
-                if (objR < 0.5f) objR = 0.5f;
-                gLen = objR + 0.8f;
                 objRotY = sel->rotY;
                 drawGizmo = true;
             } else if (mode == MODE_BUILD && buildObj.selectedSprite >= 0 && buildObj.selectedSprite < buildObj.spriteCount) {
-                AttachedSprite *as = &buildObj.sprites[buildObj.selectedSprite];
-                gCenter = as->offset;
-                gLen = 1.5f;
+                gCenter = buildObj.sprites[buildObj.selectedSprite].offset;
                 drawGizmo = true;
             } else if (mode == MODE_BUILD && buildObj.selected >= 0 && buildObj.selected < buildObj.count) {
                 Part *sp = &buildObj.parts[buildObj.selected];
                 gCenter = sp->offset;
                 gCenter.y += (sp->type == PART_CYLINDER ? sp->size.y * 0.5f : 0);
-                float partR = fmaxf(fmaxf(sp->size.x, sp->size.y), sp->size.z);
-                if (partR < 0.3f) partR = 0.3f;
-                gLen = partR + 0.5f;
                 drawGizmo = true;
             }
 
             if (drawGizmo) {
+                // Skip if gizmo center is behind the camera
+                Vector3 camFwd2 = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
+                Vector3 toCenter = Vector3Subtract(gCenter, camera.position);
+                if (Vector3DotProduct(camFwd2, toCenter) <= 0) drawGizmo = false;
+            }
+            if (drawGizmo) {
                 Vector2 sc = GetWorldToScreen(gCenter, camera);
-                Vector2 sxEnd = GetWorldToScreen((Vector3){gCenter.x + gLen, gCenter.y, gCenter.z}, camera);
-                Vector2 syEnd = GetWorldToScreen((Vector3){gCenter.x, gCenter.y + gLen, gCenter.z}, camera);
-                Vector2 szEnd = GetWorldToScreen((Vector3){gCenter.x, gCenter.y, gCenter.z + gLen}, camera);
+                Vector2 axisEnds[3];
+                float gArmLen = GizmoScreenEnds(gCenter, camera, axisEnds);
+                Vector2 sxEnd = axisEnds[0], syEnd = axisEnds[1], szEnd = axisEnds[2];
+                int tipR = (int)(gArmLen * 0.1f);
+                if (tipR < 4) tipR = 4;
 
                 bool isMove = (gizmoMode == GIZMO_MOVE);
                 bool isRot = (gizmoMode == GIZMO_ROTATE);
                 bool isScl = (gizmoMode == GIZMO_SCALE);
-                int tipR = 8;
 
                 if (isMove || isScl) {
                     Color xCol = (draggingAxis == 0) ? YELLOW : RED;
@@ -1869,27 +1881,27 @@ int main(void) {
 
                 if (isRot) {
                     Color ringCol = (draggingAxis >= 0) ? YELLOW : (Color){255,200,0,220};
+                    float ringR = gArmLen;
                     int segs = 32;
                     for (int s = 0; s < segs; s++) {
                         float a0 = (float)s / segs * 2.0f * PI;
                         float a1 = (float)(s+1) / segs * 2.0f * PI;
-                        Vector2 p0 = GetWorldToScreen((Vector3){
-                            gCenter.x+cosf(a0)*gLen, gCenter.y, gCenter.z+sinf(a0)*gLen}, camera);
-                        Vector2 p1 = GetWorldToScreen((Vector3){
-                            gCenter.x+cosf(a1)*gLen, gCenter.y, gCenter.z+sinf(a1)*gLen}, camera);
+                        Vector2 p0 = {sc.x + cosf(a0) * ringR, sc.y + sinf(a0) * ringR};
+                        Vector2 p1 = {sc.x + cosf(a1) * ringR, sc.y + sinf(a1) * ringR};
                         DrawLineEx(p0, p1, 2, ringCol);
                     }
                     for (int t = 0; t < 8; t++) {
                         float a = t * PI / 4.0f;
-                        Vector2 pi = GetWorldToScreen((Vector3){
-                            gCenter.x+cosf(a)*gLen*0.85f, gCenter.y, gCenter.z+sinf(a)*gLen*0.85f}, camera);
-                        Vector2 po = GetWorldToScreen((Vector3){
-                            gCenter.x+cosf(a)*gLen, gCenter.y, gCenter.z+sinf(a)*gLen}, camera);
+                        Vector2 pi = {sc.x + cosf(a) * ringR * 0.85f, sc.y + sinf(a) * ringR * 0.85f};
+                        Vector2 po = {sc.x + cosf(a) * ringR, sc.y + sinf(a) * ringR};
                         DrawLineEx(pi, po, 2, ringCol);
                     }
                     float rcs = cosf(objRotY), rsn = sinf(objRotY);
-                    Vector2 arrowEnd = GetWorldToScreen((Vector3){
-                        gCenter.x+rcs*gLen, gCenter.y, gCenter.z+rsn*gLen}, camera);
+                    Vector2 wDir = GetWorldToScreen((Vector3){gCenter.x+rcs, gCenter.y, gCenter.z+rsn}, camera);
+                    Vector2 aDir = Vector2Subtract(wDir, sc);
+                    float aLen = Vector2Length(aDir);
+                    if (aLen > 0) aDir = Vector2Scale(aDir, ringR / aLen);
+                    Vector2 arrowEnd = Vector2Add(sc, aDir);
                     DrawLineEx(sc, arrowEnd, 2, RED);
                     DrawCircleV(arrowEnd, tipR, RED);
                     DrawCircleV(sc, tipR, WHITE);
