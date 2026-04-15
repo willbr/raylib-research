@@ -826,26 +826,8 @@ int main(void) {
             for (int k = KEY_ZERO; k <= KEY_NINE; k++)
                 if (IsKeyPressed(k)) selectedTile = k - KEY_ZERO;
 
-            // Shift+click: place sprite billboard if sprite selected
-            if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && IsKeyDown(KEY_LEFT_SHIFT) &&
-                hoverValid && !overUI && placingSprite &&
-                selectedSpriteFile >= 0 && selectedSpriteFile < numSpriteFiles &&
-                numPlacedSprites < MAX_PLACED_SPRITES) {
-                float h = Map3DHeightAt(&map, groundHit);
-                PlacedSprite2D *ps = &placedSprites[numPlacedSprites];
-                ps->pos = (Vector3){groundHit.x, h, groundHit.z};
-                ps->scale = 1.0f;
-                ps->rotY = 0;
-                ps->partCount = spritePartCounts[selectedSpriteFile];
-                for (int p = 0; p < ps->partCount; p++)
-                    ps->parts[p] = spriteParts[selectedSpriteFile][p];
-                strncpy(ps->filename, spriteNames[selectedSpriteFile], 31);
-                ps->active = true;
-                selectedSprite = numPlacedSprites;
-                numPlacedSprites++;
-            }
-            // Paint tiles with left click (not when shift-placing sprites)
-            else if (IsMouseButtonDown(MOUSE_LEFT_BUTTON) && hoverValid && !overUI) {
+            // Paint tiles with left click
+            if (IsMouseButtonDown(MOUSE_LEFT_BUTTON) && hoverValid && !overUI) {
                 map.tiles[hoverTZ][hoverTX] = selectedTile;
             }
 
@@ -1874,7 +1856,7 @@ int main(void) {
                         hy = preview->height;
                     DrawCubeWires((Vector3){hx, hy / 2.0f, hz}, TILE_SZ, hy + 0.1f, TILE_SZ,
                         (Color){255,255,255,120});
-                } else if (IsKeyDown(KEY_LEFT_SHIFT) && (mode == MODE_OBJECTS || mode == MODE_TILES)) {
+                } else if (IsKeyDown(KEY_LEFT_SHIFT) && mode == MODE_OBJECTS) {
                     float hy = Map3DHeightAt(&map, groundHit);
                     if (placingSprite && selectedSpriteFile >= 0) {
                         // Shadow circle for sprite preview (sprite drawn in 2D after EndMode3D)
@@ -2256,23 +2238,7 @@ int main(void) {
                 snprintf(label, sizeof(label), "%c %s", i < 10 ? '0'+i : 'a'+(i-10), tileNames[i]);
                 DrawText(label, 30, y + 4, 10, sel ? WHITE : (Color){150,150,150,255});
             }
-            // Sprite billboard palette
-            if (numSpriteFiles > 0) {
-                int sprY = 72 + (int)NUM_TILEDEFS * 22 + 10;
-                DrawText("2D Sprites:", 10, sprY, 12, (Color){200,180,255,255});
-                for (int i = 0; i < numSpriteFiles; i++) {
-                    int y = sprY + 16 + i * 22;
-                    bool sel = (i == selectedSpriteFile);
-                    Rectangle ir = {8, (float)y, 160, 20};
-                    bool hov = CheckCollisionPointRec(mouse, ir);
-                    DrawRectangle(8, y, 160, 20, sel ? (Color){50,40,60,255} : (hov ? (Color){40,35,45,255} : (Color){30,30,35,255}));
-                    if (sel) DrawRectangleLinesEx(ir, 1, (Color){180,150,255,255});
-                    if (hov && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
-                        { selectedSpriteFile = i; placingSprite = true; selectedPrefab = -1; }
-                    DrawText(spriteNames[i], 14, y + 4, 11, sel ? WHITE : (Color){150,150,170,255});
-                }
-            }
-            DrawText("[Q] Eyedropper  Sprite: Shift+S", 10, sh - 60, 10, (Color){120,120,130,255});
+            DrawText("[Q] Eyedropper", 10, sh - 60, 10, (Color){120,120,130,255});
         } else {
             DrawText("Object Palette:", 10, 55, 12, WHITE);
             for (int i = 0; i < numPrefabs; i++) {
@@ -2448,6 +2414,10 @@ int main(void) {
                     mode = modes[i];
                     showModeMenu = false;
                     draggingAxis = -1;
+                    if (mode == MODE_TILES) {
+                        placingSprite = false;
+                        selectedSpriteFile = -1;
+                    }
                     if (mode == MODE_BUILD) {
                         camFocus = (Vector3){0, 0, 0};
                         camDist = 12.0f;
