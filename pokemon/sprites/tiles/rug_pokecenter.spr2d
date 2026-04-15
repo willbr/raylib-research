@@ -1,0 +1,7 @@
+# Pokecenter rug (red cross)
+rect 8.0 8.0 16.0 16.0  200 55 55 220
+# Cross bars
+rect 8.0 8.0 4.0 14.0  230 80 80 220
+rect 8.0 8.0 14.0 4.0  230 80 80 220
+# White center
+rect 8.0 8.0 4.0 4.0  240 240 240 200
