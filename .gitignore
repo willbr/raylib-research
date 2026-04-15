@@ -73,3 +73,14 @@ snowboard/snowboard
 rpgbattle/rpgbattle
 biplane/biplane
 goldensun/goldensun
+starfox/starfox
+boat/boat
+pokemon/pokemon
+fighter/fighter
+
+# Editor temp files
+editor_state.txt
+editor_build3d.obj3d
+editor_build2d.spr2d
+editor_placed.txt
+map.m3d
