@@ -64,16 +64,9 @@ static Part customPartsPool[MAX_CUSTOM_PARTS];
 static int customPartsUsed = 0;
 static char customNames[MAX_PREFABS][32];
 
-static PrefabDef prefabs[MAX_PREFABS] = {
-    { "Human",    NULL, 0 },
-    { "Car",      NULL, 0 },
-    { "Tree",     NULL, 0 },
-    { "Crate",    NULL, 0 },
-    { "Barrel",   NULL, 0 },
-    { "Lamppost", NULL, 0 },
-    { "Bush",     NULL, 0 },
-};
+static PrefabDef prefabs[MAX_PREFABS];
 static int numPrefabs = 7;
+static const char *builtinNames[] = { "Human", "Car", "Tree", "Crate", "Barrel", "Lamppost", "Bush" };
 
 // Editor state
 static Map3D map;
@@ -178,6 +171,65 @@ static Vector2 drawStart = {0};    // where the drag started (screen coords)
 static int triVertex = 0;          // 0-2: which triangle vertex we're placing next
 static Vector3 buildCursor = {0, 0.5f, 0};  // where new parts spawn
 
+// Text input state for naming
+static bool textEditing = false;
+static char *textTarget = NULL;     // pointer to the char[] being edited
+static int textMaxLen = 0;
+static int textCursor = 0;
+static char textBackup[32] = {0};   // restore on escape
+
+static void StartTextEdit(char *buf, int maxLen) {
+    textEditing = true;
+    textTarget = buf;
+    textMaxLen = maxLen;
+    textCursor = (int)strlen(buf);
+    strncpy(textBackup, buf, 31);
+}
+
+static void StopTextEdit(bool accept) {
+    if (!accept && textTarget) strncpy(textTarget, textBackup, textMaxLen - 1);
+    // If renaming a prefab, rename the file on disk
+    if (accept && textTarget) {
+        for (int i = 0; i < MAX_PREFABS; i++) {
+            if (textTarget == customNames[i] && strcmp(textBackup, customNames[i]) != 0) {
+                char oldPath[64], newPath[64];
+                snprintf(oldPath, sizeof(oldPath), "objects/%s.obj3d", textBackup);
+                for (char *c = oldPath + 8; *c && *c != '.'; c++) if (*c == ' ') *c = '_';
+                snprintf(newPath, sizeof(newPath), "objects/%s.obj3d", customNames[i]);
+                for (char *c = newPath + 8; *c && *c != '.'; c++) if (*c == ' ') *c = '_';
+                if (FileExists(oldPath)) rename(oldPath, newPath);
+                break;
+            }
+        }
+    }
+    textEditing = false;
+    textTarget = NULL;
+}
+
+// Returns true if text input consumed input this frame
+static bool UpdateTextEdit(void) {
+    if (!textEditing || !textTarget) return false;
+    if (IsKeyPressed(KEY_ENTER)) { StopTextEdit(true); return true; }
+    if (IsKeyPressed(KEY_ESCAPE)) { StopTextEdit(false); return true; }
+    if (IsKeyPressed(KEY_BACKSPACE) && textCursor > 0) {
+        for (int i = textCursor - 1; textTarget[i]; i++) textTarget[i] = textTarget[i+1];
+        textCursor--;
+    }
+    if (IsKeyPressed(KEY_LEFT) && textCursor > 0) textCursor--;
+    if (IsKeyPressed(KEY_RIGHT) && textCursor < (int)strlen(textTarget)) textCursor++;
+    // Character input
+    int ch;
+    while ((ch = GetCharPressed()) != 0) {
+        int len = (int)strlen(textTarget);
+        if (len < textMaxLen - 1 && ch >= 32 && ch < 127 && ch != ' ') {
+            for (int i = len + 1; i > textCursor; i--) textTarget[i] = textTarget[i-1];
+            textTarget[textCursor] = (char)ch;
+            textCursor++;
+        }
+    }
+    return true;
+}
+
 static EditorMode mode = MODE_TILES;
 static int selectedTile = 1;
 static int selectedPrefab = 0;
@@ -201,6 +253,36 @@ static float GizmoScreenEnds(Vector3 center, Camera3D cam, Vector2 *axisEnds) {
     }
     return armLen;
 }
+// Determine which rotation ring axis (0=X, 1=Y, 2=Z) the mouse is closest to.
+// Returns the axis index, or -1 if not close enough. ringR is the screen-space ring radius.
+static int RotateGizmoHitAxis(Vector2 mouse, Vector3 center, Camera3D cam, float ringR) {
+    Vector2 sc = GetWorldToScreen(center, cam);
+    float mouseDist = Vector2Distance(mouse, sc);
+    if (mouseDist > ringR * 1.4f) return -1;  // too far from any ring
+    int segs = 16;
+    float bestDist = 1e9f;
+    int bestAxis = -1;
+    for (int ax = 0; ax < 3; ax++) {
+        for (int s = 0; s < segs; s++) {
+            float a = (float)s / segs * 2.0f * PI;
+            Vector3 w = center;
+            if (ax == 0) { w.y += cosf(a); w.z += sinf(a); }
+            else if (ax == 1) { w.x += cosf(a); w.z += sinf(a); }
+            else { w.x += cosf(a); w.y += sinf(a); }
+            Vector2 sp = GetWorldToScreen(w, cam);
+            Vector2 d = Vector2Subtract(sp, sc);
+            float len = Vector2Length(d);
+            if (len > 0) d = Vector2Scale(d, ringR / len);
+            Vector2 ringPt = Vector2Add(sc, d);
+            float dist = Vector2Distance(mouse, ringPt);
+            if (dist < bestDist) { bestDist = dist; bestAxis = ax; }
+        }
+    }
+    float hitThresh = ringR * 0.25f;
+    if (hitThresh < 12) hitThresh = 12;
+    return (bestDist < hitThresh) ? bestAxis : -1;
+}
+
 static bool showExport = false;
 static bool showGrid = true;
 static bool showMinimap = true;
@@ -465,14 +547,19 @@ void LoadEditorState(void) {
 }
 
 void InitEditor(void) {
-    // Init built-in prefab part pointers
-    prefabs[0].parts = humanParts;  prefabs[0].partCount = sizeof(humanParts)/sizeof(Part);
-    prefabs[1].parts = carParts;    prefabs[1].partCount = sizeof(carParts)/sizeof(Part);
-    prefabs[2].parts = treeParts;   prefabs[2].partCount = sizeof(treeParts)/sizeof(Part);
-    prefabs[3].parts = crateParts;  prefabs[3].partCount = sizeof(crateParts)/sizeof(Part);
-    prefabs[4].parts = barrelParts; prefabs[4].partCount = sizeof(barrelParts)/sizeof(Part);
-    prefabs[5].parts = lampParts;   prefabs[5].partCount = sizeof(lampParts)/sizeof(Part);
-    prefabs[6].parts = bushParts;   prefabs[6].partCount = sizeof(bushParts)/sizeof(Part);
+    // Init built-in prefab part pointers and copy names into mutable storage
+    Part *builtinParts[] = { humanParts, carParts, treeParts, crateParts, barrelParts, lampParts, bushParts };
+    int builtinCounts[] = {
+        sizeof(humanParts)/sizeof(Part), sizeof(carParts)/sizeof(Part), sizeof(treeParts)/sizeof(Part),
+        sizeof(crateParts)/sizeof(Part), sizeof(barrelParts)/sizeof(Part), sizeof(lampParts)/sizeof(Part),
+        sizeof(bushParts)/sizeof(Part)
+    };
+    for (int i = 0; i < numPrefabs; i++) {
+        strncpy(customNames[i], builtinNames[i], 31);
+        prefabs[i].name = customNames[i];
+        prefabs[i].parts = builtinParts[i];
+        prefabs[i].partCount = builtinCounts[i];
+    }
 
     // Create objects/ directory and save/load built-in prefabs
     MakeDirectory("objects");
@@ -572,8 +659,11 @@ int main(void) {
         int sw = GetScreenWidth(), sh = GetScreenHeight();
         Vector2 mouse = GetMousePosition();
 
+        // Text input consumes keys when active
+        bool textActive = UpdateTextEdit();
+
         // --- Camera mode toggle: V cycles Orbit -> FPS -> Fly ---
-        if (IsKeyPressed(KEY_V)) {
+        if (IsKeyPressed(KEY_V) && !textActive) {
             if (camMode == CAM_ORBIT) {
                 camMode = CAM_FPS;
                 fpsCamPos = camera.position;
@@ -697,7 +787,7 @@ int main(void) {
         }
 
         // --- Mode switch (TAB opens popup menu at cursor) ---
-        if (IsKeyPressed(KEY_TAB)) {
+        if (IsKeyPressed(KEY_TAB) && !textActive) {
             showModeMenu = !showModeMenu;
             if (showModeMenu) modeMenuPos = GetMousePosition();
         }
@@ -731,7 +821,7 @@ int main(void) {
         bool hoverValid = !overUI && hoverTX >= 0 && hoverTX < map.width &&
                           hoverTZ >= 0 && hoverTZ < map.height;
 
-        if (mode == MODE_TILES) {
+        if (mode == MODE_TILES && !textActive) {
             // Tile selection: number keys or scroll in palette
             for (int k = KEY_ZERO; k <= KEY_NINE; k++)
                 if (IsKeyPressed(k)) selectedTile = k - KEY_ZERO;
@@ -763,7 +853,7 @@ int main(void) {
             if (IsKeyPressed(KEY_Q) && hoverValid) {
                 selectedTile = map.tiles[hoverTZ][hoverTX];
             }
-        } else if (mode == MODE_OBJECTS) {
+        } else if (mode == MODE_OBJECTS && !textActive) {
             // Object mode
             // Select prefab
             for (int k = KEY_ONE; k <= KEY_NINE; k++)
@@ -781,9 +871,8 @@ int main(void) {
                 float hitR = gArm * 0.25f;
                 if (hitR < 12) hitR = 12;
                 if (gizmoMode == GIZMO_ROTATE) {
-                    if (Vector2Distance(mouse, screenCenter) < gArm + hitR) {
-                        draggingAxis = 0; clickedGizmo = true;
-                    }
+                    int rax = RotateGizmoHitAxis(mouse, ss->pos, camera, gArm);
+                    if (rax >= 0) { draggingAxis = rax; clickedGizmo = true; }
                 } else {
                     for (int ax = 0; ax < 3; ax++) {
                         if (Vector2Distance(mouse, gEnds[ax]) < hitR) {
@@ -809,10 +898,8 @@ int main(void) {
                 if (hitR < 12) hitR = 12;
 
                 if (gizmoMode == GIZMO_ROTATE) {
-                    if (Vector2Distance(mouse, screenCenter) < gArm + hitR) {
-                        draggingAxis = 0;
-                        clickedGizmo = true;
-                    }
+                    int rax = RotateGizmoHitAxis(mouse, gCtr, camera, gArm);
+                    if (rax >= 0) { draggingAxis = rax; clickedGizmo = true; }
                 } else {
                     for (int ax = 0; ax < 3; ax++) {
                         if (Vector2Distance(mouse, gEnds[ax]) < hitR) {
@@ -951,7 +1038,8 @@ int main(void) {
                                 sel->pos.y = Map3DHeightAt(&map, sel->pos);
                             }
                         } else if (gizmoMode == GIZMO_ROTATE) {
-                            sel->rotY += delta.x * 0.02f;
+                            // Only Y rotation supported for placed objects
+                            if (draggingAxis == 1) sel->rotY += delta.x * 0.02f;
                         } else if (gizmoMode == GIZMO_SCALE) {
                             float sd = (delta.x - delta.y) * 0.005f;
                             if (draggingAxis == 0)      sel->scale.x += sd;
@@ -1023,7 +1111,7 @@ int main(void) {
         }}
 
         // --- Build mode ---
-        if (mode == MODE_BUILD) {
+        if (mode == MODE_BUILD && !textActive) {
             // Select primitive type
             if (IsKeyPressed(KEY_ONE)) buildPrimitive = 0;  // cube
             if (IsKeyPressed(KEY_TWO)) buildPrimitive = 1;  // sphere
@@ -1079,11 +1167,16 @@ int main(void) {
                     float gArm = GizmoScreenEnds(gCtr, camera, gEnds);
                     float hitR = gArm * 0.25f;
                     if (hitR < 12) hitR = 12;
-                    for (int ax = 0; ax < 3; ax++) {
-                        if (Vector2Distance(mouse, gEnds[ax]) < hitR) { draggingAxis = ax; hitGizmo = true; break; }
-                    }
-                    if (!hitGizmo && Vector2Distance(mouse, gCenter2) < hitR) {
-                        draggingAxis = 3; hitGizmo = true;
+                    if (gizmoMode == GIZMO_ROTATE) {
+                        int rax = RotateGizmoHitAxis(mouse, gCtr, camera, gArm);
+                        if (rax >= 0) { draggingAxis = rax; hitGizmo = true; }
+                    } else {
+                        for (int ax = 0; ax < 3; ax++) {
+                            if (Vector2Distance(mouse, gEnds[ax]) < hitR) { draggingAxis = ax; hitGizmo = true; break; }
+                        }
+                        if (!hitGizmo && Vector2Distance(mouse, gCenter2) < hitR) {
+                            draggingAxis = 3; hitGizmo = true;
+                        }
                     }
                 }
                 if (!hitGizmo && buildObj.selectedSprite >= 0) {
@@ -1094,10 +1187,15 @@ int main(void) {
                     float gArm = GizmoScreenEnds(as->offset, camera, gEnds);
                     float hitR = gArm * 0.25f;
                     if (hitR < 12) hitR = 12;
-                    for (int ax = 0; ax < 3; ax++) {
-                        if (Vector2Distance(mouse, gEnds[ax]) < hitR) { draggingAxis = ax; hitGizmo = true; break; }
+                    if (gizmoMode == GIZMO_ROTATE) {
+                        int rax = RotateGizmoHitAxis(mouse, as->offset, camera, gArm);
+                        if (rax >= 0) { draggingAxis = rax; hitGizmo = true; }
+                    } else {
+                        for (int ax = 0; ax < 3; ax++) {
+                            if (Vector2Distance(mouse, gEnds[ax]) < hitR) { draggingAxis = ax; hitGizmo = true; break; }
+                        }
+                        if (!hitGizmo && Vector2Distance(mouse, sc2) < hitR) { draggingAxis = 3; hitGizmo = true; }
                     }
-                    if (!hitGizmo && Vector2Distance(mouse, sc2) < hitR) { draggingAxis = 3; hitGizmo = true; }
                 }
                 if (!hitGizmo) {
                     // Select nearest part or attached sprite using screen-space distance
@@ -1143,12 +1241,22 @@ int main(void) {
                         sp->offset.z = hit.z;
                     }
                 } else if (gizmoMode == GIZMO_ROTATE) {
-                    // Orbit the part around the origin (Y axis)
+                    // Orbit the part around the origin on the selected axis
                     float angle = delta.x * 0.02f;
-                    float ox = sp->offset.x, oz = sp->offset.z;
-                    float rcs = cosf(angle), rsn = sinf(angle);
-                    sp->offset.x = ox * rcs - oz * rsn;
-                    sp->offset.z = ox * rsn + oz * rcs;
+                    float c = cosf(angle), s = sinf(angle);
+                    if (draggingAxis == 0) { // X axis: rotate in YZ plane
+                        float oy = sp->offset.y, oz = sp->offset.z;
+                        sp->offset.y = oy * c - oz * s;
+                        sp->offset.z = oy * s + oz * c;
+                    } else if (draggingAxis == 1) { // Y axis: rotate in XZ plane
+                        float ox = sp->offset.x, oz = sp->offset.z;
+                        sp->offset.x = ox * c - oz * s;
+                        sp->offset.z = ox * s + oz * c;
+                    } else if (draggingAxis == 2) { // Z axis: rotate in XY plane
+                        float ox = sp->offset.x, oy = sp->offset.y;
+                        sp->offset.x = ox * c - oy * s;
+                        sp->offset.y = ox * s + oy * c;
+                    }
                 } else if (gizmoMode == GIZMO_SCALE) {
                     float sd = (delta.x - delta.y) * 0.005f;
                     if (draggingAxis == 0)      sp->size.x = Clamp(sp->size.x + sd, 0.05f, 5.0f);
@@ -1880,30 +1988,48 @@ int main(void) {
                 }
 
                 if (isRot) {
-                    Color ringCol = (draggingAxis >= 0) ? YELLOW : (Color){255,200,0,220};
                     float ringR = gArmLen;
                     int segs = 32;
-                    for (int s = 0; s < segs; s++) {
-                        float a0 = (float)s / segs * 2.0f * PI;
-                        float a1 = (float)(s+1) / segs * 2.0f * PI;
-                        Vector2 p0 = {sc.x + cosf(a0) * ringR, sc.y + sinf(a0) * ringR};
-                        Vector2 p1 = {sc.x + cosf(a1) * ringR, sc.y + sinf(a1) * ringR};
-                        DrawLineEx(p0, p1, 2, ringCol);
+                    // Draw 3 rings: X (red, YZ plane), Y (green, XZ plane), Z (blue, XY plane)
+                    Color ringColors[3] = { RED, GREEN, BLUE };
+                    for (int ax = 0; ax < 3; ax++) {
+                        Color col = (draggingAxis == ax) ? YELLOW : ringColors[ax];
+                        for (int s = 0; s < segs; s++) {
+                            float a0 = (float)s / segs * 2.0f * PI;
+                            float a1 = (float)(s+1) / segs * 2.0f * PI;
+                            Vector3 w0 = gCenter, w1 = gCenter;
+                            if (ax == 0) { // X: ring in YZ plane
+                                w0.y += cosf(a0) * 1.0f; w0.z += sinf(a0) * 1.0f;
+                                w1.y += cosf(a1) * 1.0f; w1.z += sinf(a1) * 1.0f;
+                            } else if (ax == 1) { // Y: ring in XZ plane
+                                w0.x += cosf(a0) * 1.0f; w0.z += sinf(a0) * 1.0f;
+                                w1.x += cosf(a1) * 1.0f; w1.z += sinf(a1) * 1.0f;
+                            } else { // Z: ring in XY plane
+                                w0.x += cosf(a0) * 1.0f; w0.y += sinf(a0) * 1.0f;
+                                w1.x += cosf(a1) * 1.0f; w1.y += sinf(a1) * 1.0f;
+                            }
+                            // Project to screen and normalize to ringR
+                            Vector2 s0 = GetWorldToScreen(w0, camera);
+                            Vector2 s1 = GetWorldToScreen(w1, camera);
+                            Vector2 d0 = Vector2Subtract(s0, sc);
+                            Vector2 d1 = Vector2Subtract(s1, sc);
+                            float l0 = Vector2Length(d0), l1 = Vector2Length(d1);
+                            if (l0 > 0) d0 = Vector2Scale(d0, ringR / l0);
+                            if (l1 > 0) d1 = Vector2Scale(d1, ringR / l1);
+                            Vector2 p0 = Vector2Add(sc, d0);
+                            Vector2 p1 = Vector2Add(sc, d1);
+                            DrawLineEx(p0, p1, 2, col);
+                        }
                     }
-                    for (int t = 0; t < 8; t++) {
-                        float a = t * PI / 4.0f;
-                        Vector2 pi = {sc.x + cosf(a) * ringR * 0.85f, sc.y + sinf(a) * ringR * 0.85f};
-                        Vector2 po = {sc.x + cosf(a) * ringR, sc.y + sinf(a) * ringR};
-                        DrawLineEx(pi, po, 2, ringCol);
-                    }
+                    // Direction arrow for Y rotation
                     float rcs = cosf(objRotY), rsn = sinf(objRotY);
                     Vector2 wDir = GetWorldToScreen((Vector3){gCenter.x+rcs, gCenter.y, gCenter.z+rsn}, camera);
                     Vector2 aDir = Vector2Subtract(wDir, sc);
                     float aLen = Vector2Length(aDir);
                     if (aLen > 0) aDir = Vector2Scale(aDir, ringR / aLen);
                     Vector2 arrowEnd = Vector2Add(sc, aDir);
-                    DrawLineEx(sc, arrowEnd, 2, RED);
-                    DrawCircleV(arrowEnd, tipR, RED);
+                    DrawLineEx(sc, arrowEnd, 2, (Color){255,100,100,255});
+                    DrawCircleV(arrowEnd, tipR, (Color){255,100,100,255});
                     DrawCircleV(sc, tipR, WHITE);
                 }
 
@@ -1929,7 +2055,28 @@ int main(void) {
         DrawText("[TAB] switch mode", 10, 32, 10, (Color){120,120,130,255});
 
         if (mode == MODE_BUILD) {
-            DrawText("Build Object:", 10, 55, 12, WHITE);
+            // Editable name field
+            {
+                DrawText("Name:", 10, 55, 10, (Color){150,150,150,255});
+                Rectangle nameRect = {50, 52, 118, 18};
+                bool nameHov = CheckCollisionPointRec(mouse, nameRect);
+                bool nameActive = (textEditing && textTarget == buildObj.name);
+                DrawRectangleRec(nameRect, nameActive ? (Color){50,50,60,255} : (nameHov ? (Color){40,40,45,255} : (Color){30,30,35,255}));
+                DrawRectangleLinesEx(nameRect, 1, nameActive ? GOLD : (nameHov ? (Color){100,100,110,255} : (Color){60,60,65,255}));
+                if (nameActive) {
+                    // Draw text with cursor
+                    char before[32] = {0};
+                    strncpy(before, buildObj.name, textCursor);
+                    before[textCursor] = '\0';
+                    int cx = 54 + MeasureText(before, 11);
+                    DrawText(buildObj.name, 54, 56, 11, WHITE);
+                    if ((int)(GetTime() * 2) % 2 == 0) DrawLine(cx, 54, cx, 68, GOLD);
+                } else {
+                    DrawText(buildObj.name, 54, 56, 11, WHITE);
+                }
+                if (nameHov && IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !nameActive)
+                    StartTextEdit(buildObj.name, 32);
+            }
             DrawText(TextFormat("Parts: %d/%d", buildObj.count, MAX_BUILD_PARTS), 10, 72, 10, (Color){180,180,180,255});
 
             // Primitive selector
@@ -2035,7 +2182,7 @@ int main(void) {
             DrawText("[F] Add part  [DEL] Remove", 10, sh - 90, 10, (Color){120,120,130,255});
             DrawText("[Z] Move  [X] Rotate  [C] Scale", 10, sh - 75, 10, (Color){120,120,130,255});
             DrawText("Shift+Click: Place sprite", 10, sh - 60, 10, (Color){120,120,130,255});
-            DrawText("[ENTER] Save to palette", 10, sh - 45, 10, GOLD);
+            DrawText(TextFormat("[ENTER] Save as \"%s\"", buildObj.name), 10, sh - 45, 10, GOLD);
 
             const char *gmNames[] = { "", "MOVE", "ROTATE", "SCALE" };
             Color gmCol = gizmoMode == GIZMO_MOVE ? GREEN : (gizmoMode == GIZMO_ROTATE ? YELLOW : ORANGE);
@@ -2131,19 +2278,36 @@ int main(void) {
             for (int i = 0; i < numPrefabs; i++) {
                 int y = 72 + i * 26;
                 bool sel = (i == selectedPrefab);
+                bool isRenaming = (textEditing && textTarget == customNames[i]);
                 Rectangle itemRect = {8, (float)y, 160, 24};
                 bool hover = CheckCollisionPointRec(mouse, itemRect);
-                Color bg = sel ? (Color){60,50,30,255} : (hover ? (Color){45,40,35,255} : (Color){30,30,35,255});
+                Color bg = isRenaming ? (Color){50,50,60,255} : (sel ? (Color){60,50,30,255} : (hover ? (Color){45,40,35,255} : (Color){30,30,35,255}));
                 DrawRectangle(8, y, 160, 24, bg);
-                if (sel) DrawRectangleLinesEx(itemRect, 1, GOLD);
+                if (isRenaming) DrawRectangleLinesEx(itemRect, 1, GOLD);
+                else if (sel) DrawRectangleLinesEx(itemRect, 1, GOLD);
                 else if (hover) DrawRectangleLinesEx(itemRect, 1, (Color){100,90,70,255});
 
-                // Click to select
-                if (hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
-                    { selectedPrefab = i; placingSprite = false; selectedSpriteFile = -1; }
+                // Click to select, double-click to rename
+                if (hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !isRenaming) {
+                    if (sel && !textEditing) {
+                        // Already selected — start renaming
+                        StartTextEdit(customNames[i], 32);
+                    } else {
+                        selectedPrefab = i; placingSprite = false; selectedSpriteFile = -1;
+                    }
+                }
 
-                DrawText(TextFormat("%d: %s", i+1, prefabs[i].name), 14, y + 6, 12,
-                    sel ? WHITE : (Color){150,150,150,255});
+                if (isRenaming) {
+                    char before[32] = {0};
+                    strncpy(before, customNames[i], textCursor);
+                    before[textCursor] = '\0';
+                    int cx = 14 + MeasureText(before, 12);
+                    DrawText(customNames[i], 14, y + 6, 12, WHITE);
+                    if ((int)(GetTime() * 2) % 2 == 0) DrawLine(cx, y + 4, cx, y + 20, GOLD);
+                } else {
+                    DrawText(TextFormat("%d: %s", i+1, prefabs[i].name), 14, y + 6, 12,
+                        sel ? WHITE : (Color){150,150,150,255});
+                }
             }
             // Sprite billboard palette
             if (numSpriteFiles > 0) {
@@ -2308,6 +2472,8 @@ int main(void) {
     }
 
     SaveEditorState();
+    SaveMap3D("map.m3d", &map);
+    SavePlacedObjects();
     CloseWindow();
     return 0;
 }
