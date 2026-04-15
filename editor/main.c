@@ -168,6 +168,11 @@ static float lastLineWidth = 2.0f;  // remembered line thickness
 static Color selectedColor = {230, 41, 55, 255};  // current drawing color (default red)
 static float build2dZoom = 3.0f;    // canvas zoom level
 static Vector2 build2dPan = {0};    // canvas pan offset
+static int build2dTool = 0;         // 0=select, 1=draw
+static bool build2dMultiSel[MAX_BUILD2D_PARTS] = {0};  // multi-selection
+static bool build2dMarquee = false;
+static Vector2 build2dMarqueeStart = {0};
+static Vector2 build2dMarqueeEnd = {0};
 static bool drawing2d = false;     // currently dragging to create a shape
 static Vector2 drawStart = {0};    // where the drag started (screen coords)
 static int triVertex = 0;          // 0-2: which triangle vertex we're placing next
@@ -1495,15 +1500,21 @@ int main(void) {
                 float wheel = GetMouseWheelMove();
                 if (wheel != 0 && !overUI && !drawing2d) {
                     if (IsKeyDown(KEY_LEFT_CONTROL) || build2d.selected < 0) {
-                        // Zoom toward mouse position
+                        // Zoom toward mouse cursor
+                        // The canvas point under the mouse should stay under the mouse
                         float oldZoom = build2dZoom;
                         build2dZoom += wheel * 0.3f;
                         if (build2dZoom < 0.5f) build2dZoom = 0.5f;
                         if (build2dZoom > 10.0f) build2dZoom = 10.0f;
-                        // Adjust pan so zoom centers on mouse
-                        float zoomRatio = build2dZoom / oldZoom;
-                        build2dPan.x = mouse.x - (mouse.x - build2dPan.x) * zoomRatio - (sw/2.0f - build2dPan.x) * (zoomRatio - 1);
-                        build2dPan.y = mouse.y - (mouse.y - build2dPan.y) * zoomRatio - (sh/2.0f - build2dPan.y) * (zoomRatio - 1);
+                        // mouse = screenCenter + pan + canvasPoint * zoom
+                        // canvasPoint = (mouse - screenCenter - pan) / oldZoom
+                        // We want the same canvasPoint at the same mouse pos with new zoom:
+                        // mouse = screenCenter + newPan + canvasPoint * newZoom
+                        // newPan = mouse - screenCenter - canvasPoint * newZoom
+                        float cpx = (mouse.x - sw/2.0f - build2dPan.x) / oldZoom;
+                        float cpy = (mouse.y - sh/2.0f - build2dPan.y) / oldZoom;
+                        build2dPan.x = mouse.x - sw/2.0f - cpx * build2dZoom;
+                        build2dPan.y = mouse.y - sh/2.0f - cpy * build2dZoom;
                         zm = build2dZoom;
                         cx = sw / 2.0f + build2dPan.x;
                         cy = sh / 2.0f + build2dPan.y;
@@ -1523,11 +1534,14 @@ int main(void) {
             // Convert mouse to canvas coords (sprite space)
             float mouseCanvasX = (mouse.x - cx) / zm;
             float mouseCanvasY = (mouse.y - cy) / zm;
-            bool shiftHeld = IsKeyDown(KEY_LEFT_SHIFT);
-            if (shiftHeld) {
-                // --- Shift: select and move existing parts ---
+            // Tool switch: Q toggles select/draw
+            if (IsKeyPressed(KEY_Q)) build2dTool = 1 - build2dTool;
+
+            if (build2dTool == 0) {
+                // --- SELECT TOOL ---
                 if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !overUI) {
-                    build2d.selected = -1;
+                    // Try to click-select a part
+                    int hitPart = -1;
                     float bestD = 30.0f;
                     for (int i = 0; i < build2d.count; i++) {
                         Sprite2DPart *sp = &build2d.parts[i];
@@ -1548,13 +1562,82 @@ int main(void) {
                         } else {
                             d = Vector2Distance(mouse, (Vector2){cx + sp->x * zm, cy + sp->y * zm});
                         }
-                        if (d < bestD) { bestD = d; build2d.selected = i; }
+                        if (d < bestD) { bestD = d; hitPart = i; }
+                    }
+                    if (hitPart >= 0) {
+                        // Shift+click: toggle add to multi-selection
+                        if (IsKeyDown(KEY_LEFT_SHIFT)) {
+                            build2dMultiSel[hitPart] = !build2dMultiSel[hitPart];
+                            build2d.selected = hitPart;
+                        } else {
+                            // Clear multi-sel, select just this one
+                            memset(build2dMultiSel, 0, sizeof(build2dMultiSel));
+                            build2d.selected = hitPart;
+                            build2dMultiSel[hitPart] = true;
+                        }
+                    } else {
+                        // Clicked empty space — start marquee
+                        if (!IsKeyDown(KEY_LEFT_SHIFT)) {
+                            build2d.selected = -1;
+                            memset(build2dMultiSel, 0, sizeof(build2dMultiSel));
+                        }
+                        build2dMarquee = true;
+                        build2dMarqueeStart = mouse;
+                        build2dMarqueeEnd = mouse;
                     }
                 }
-                if (build2d.selected >= 0 && IsMouseButtonDown(MOUSE_LEFT_BUTTON) && !overUI) {
+
+                // Marquee drag
+                if (build2dMarquee && IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+                    build2dMarqueeEnd = mouse;
+                }
+                if (build2dMarquee && IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
+                    build2dMarquee = false;
+                    // Select all parts inside marquee
+                    float mx0 = fminf(build2dMarqueeStart.x, build2dMarqueeEnd.x);
+                    float my0 = fminf(build2dMarqueeStart.y, build2dMarqueeEnd.y);
+                    float mx1 = fmaxf(build2dMarqueeStart.x, build2dMarqueeEnd.x);
+                    float my1 = fmaxf(build2dMarqueeStart.y, build2dMarqueeEnd.y);
+                    if (mx1 - mx0 > 5 || my1 - my0 > 5) { // only if dragged a real rect
+                        if (!IsKeyDown(KEY_LEFT_SHIFT))
+                            memset(build2dMultiSel, 0, sizeof(build2dMultiSel));
+                        for (int i = 0; i < build2d.count; i++) {
+                            Sprite2DPart *sp = &build2d.parts[i];
+                            float sx, sy;
+                            if (sp->type == SP_TRIANGLE) {
+                                sx = cx + ((sp->x + sp->w + sp->extra1) / 3.0f) * zm;
+                                sy = cy + ((sp->y + sp->h + sp->extra2) / 3.0f) * zm;
+                            } else {
+                                sx = cx + sp->x * zm;
+                                sy = cy + sp->y * zm;
+                            }
+                            if (sx >= mx0 && sx <= mx1 && sy >= my0 && sy <= my1) {
+                                build2dMultiSel[i] = true;
+                                build2d.selected = i;
+                            }
+                        }
+                    }
+                }
+
+                // Move selected parts (drag when clicked on a selected part)
+                if (!build2dMarquee && IsMouseButtonDown(MOUSE_LEFT_BUTTON) && !overUI && build2d.selected >= 0) {
                     Vector2 delta = GetMouseDelta();
-                    build2d.parts[build2d.selected].x += delta.x / zm;
-                    build2d.parts[build2d.selected].y += delta.y / zm;
+                    if (delta.x != 0 || delta.y != 0) {
+                        for (int i = 0; i < build2d.count; i++) {
+                            if (!build2dMultiSel[i]) continue;
+                            build2d.parts[i].x += delta.x / zm;
+                            build2d.parts[i].y += delta.y / zm;
+                            // Also move line/tri endpoints
+                            if (build2d.parts[i].type == SP_LINE || build2d.parts[i].type == SP_TRIANGLE) {
+                                build2d.parts[i].w += delta.x / zm;
+                                build2d.parts[i].h += delta.y / zm;
+                            }
+                            if (build2d.parts[i].type == SP_TRIANGLE) {
+                                build2d.parts[i].extra1 += delta.x / zm;
+                                build2d.parts[i].extra2 += delta.y / zm;
+                            }
+                        }
+                    }
                 }
             } else if (build2dPrimitive == 2 && triVertex > 0) {
                 // --- Triangle: third vertex tracks mouse until clicked ---
@@ -1715,12 +1798,28 @@ int main(void) {
                 }
             }
 
-            // Delete selected
-            if (build2d.selected >= 0 && (IsKeyPressed(KEY_DELETE) || IsKeyPressed(KEY_BACKSPACE))) {
-                for (int i = build2d.selected; i < build2d.count - 1; i++)
-                    build2d.parts[i] = build2d.parts[i + 1];
-                build2d.count--;
-                build2d.selected = -1;
+            // Delete selected (multi-selection aware)
+            if (IsKeyPressed(KEY_DELETE) || IsKeyPressed(KEY_BACKSPACE)) {
+                // Remove all selected parts (iterate backwards to keep indices valid)
+                bool anySelected = false;
+                for (int i = 0; i < build2d.count; i++) if (build2dMultiSel[i]) anySelected = true;
+                if (anySelected) {
+                    int dst = 0;
+                    for (int src = 0; src < build2d.count; src++) {
+                        if (!build2dMultiSel[src]) {
+                            build2d.parts[dst] = build2d.parts[src];
+                            dst++;
+                        }
+                    }
+                    build2d.count = dst;
+                    build2d.selected = -1;
+                    memset(build2dMultiSel, 0, sizeof(build2dMultiSel));
+                } else if (build2d.selected >= 0) {
+                    for (int i = build2d.selected; i < build2d.count - 1; i++)
+                        build2d.parts[i] = build2d.parts[i + 1];
+                    build2d.count--;
+                    build2d.selected = -1;
+                }
             }
 
             // Escape deselect
@@ -1850,10 +1949,28 @@ int main(void) {
             // Zoom indicator
             DrawText(TextFormat("Zoom: %.1fx", build2dZoom), sw - 120, sh - 20, 12, (Color){100,100,120,255});
 
+            // Marquee selection rectangle
+            if (build2dMarquee) {
+                float mx0 = fminf(build2dMarqueeStart.x, build2dMarqueeEnd.x);
+                float my0 = fminf(build2dMarqueeStart.y, build2dMarqueeEnd.y);
+                float mw = fabsf(build2dMarqueeEnd.x - build2dMarqueeStart.x);
+                float mh = fabsf(build2dMarqueeEnd.y - build2dMarqueeStart.y);
+                DrawRectangle(mx0, my0, mw, mh, (Color){80, 140, 255, 40});
+                DrawRectangleLines(mx0, my0, mw, mh, (Color){80, 140, 255, 200});
+            }
+
+            // Tool indicator
+            DrawText(build2dTool == 0 ? "[Q] SELECT" : "[Q] DRAW", sw - 120, sh - 36, 12,
+                build2dTool == 0 ? (Color){80, 180, 255, 255} : (Color){255, 180, 80, 255});
+
             // Draw all 2D parts
             for (int i = 0; i < build2d.count; i++) {
                 DrawSprite2DPart(&build2d.parts[i], cx, cy, build2dZoom);
-                // Selected highlight: draw corner handles instead of full overlay
+                // Multi-selection highlight
+                if (build2dMultiSel[i] && i != build2d.selected) {
+                    DrawSprite2DPartOutline(&build2d.parts[i], cx, cy, build2dZoom, (Color){100,150,255,180});
+                }
+                // Primary selected highlight
                 if (i == build2d.selected) {
                     Sprite2DPart *sp = &build2d.parts[i];
                     switch (sp->type) {

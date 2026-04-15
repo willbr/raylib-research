@@ -82,6 +82,161 @@ static inline Vector3 RotateY(Vector3 v, float angle) {
     return (Vector3){ v.x * cs - v.z * sn, v.y, v.x * sn + v.z * cs };
 }
 
+// Rotate vector by roll, pitch, yaw (full 3-axis rotation)
+static inline Vector3 RotateVec3D(Vector3 v, float pitch, float yaw, float roll) {
+    float cr = cosf(roll), sr = sinf(roll);
+    float x1 = v.x * cr - v.y * sr;
+    float y1 = v.x * sr + v.y * cr;
+    float cp = cosf(pitch), sp = sinf(pitch);
+    float y2 = y1 * cp - v.z * sp;
+    float z2 = y1 * sp + v.z * cp;
+    float cy = cosf(yaw), sy = sinf(yaw);
+    return (Vector3){ x1 * cy + z2 * sy, y2, -x1 * sy + z2 * cy };
+}
+
+// Draw a cube with full 3D rotation (pitch/yaw/roll) using triangles
+static inline void DrawCubeRotated3D(Vector3 center, float w, float h, float d,
+                                     float pitch, float yaw, float roll, Color col) {
+    Vector3 corners[8] = {
+        {-w/2,-h/2,-d/2},{w/2,-h/2,-d/2},{w/2,h/2,-d/2},{-w/2,h/2,-d/2},
+        {-w/2,-h/2,d/2},{w/2,-h/2,d/2},{w/2,h/2,d/2},{-w/2,h/2,d/2}
+    };
+    for (int c = 0; c < 8; c++)
+        corners[c] = Vector3Add(center, RotateVec3D(corners[c], pitch, yaw, roll));
+    int faces[6][4] = {{0,1,2,3},{4,5,6,7},{0,4,7,3},{1,5,6,2},{0,1,5,4},{3,2,6,7}};
+    for (int f = 0; f < 6; f++) {
+        DrawTriangle3D(corners[faces[f][0]], corners[faces[f][1]], corners[faces[f][2]], col);
+        DrawTriangle3D(corners[faces[f][0]], corners[faces[f][2]], corners[faces[f][3]], col);
+        DrawTriangle3D(corners[faces[f][2]], corners[faces[f][1]], corners[faces[f][0]], col);
+        DrawTriangle3D(corners[faces[f][3]], corners[faces[f][2]], corners[faces[f][0]], col);
+    }
+}
+
+// Draw a Part with full 3D rotation (for vehicles/ships that pitch/roll)
+static inline void DrawPartRotated3D(Part *part, Vector3 pos, float pitch, float yaw, float roll) {
+    Vector3 rotOffset = RotateVec3D(part->offset, pitch, yaw, roll);
+    Vector3 worldPos = Vector3Add(pos, rotOffset);
+    switch (part->type) {
+        case PART_CUBE:
+            DrawCubeRotated3D(worldPos, part->size.x, part->size.y, part->size.z,
+                pitch, yaw, roll, part->color);
+            break;
+        case PART_SPHERE:
+            DrawSphere(worldPos, part->size.x, part->color);
+            break;
+        case PART_CYLINDER: {
+            Vector3 topOff = {part->offset.x, part->offset.y, part->offset.z + part->size.y};
+            Vector3 top = Vector3Add(pos, RotateVec3D(topOff, pitch, yaw, roll));
+            DrawCylinderEx(worldPos, top, part->size.x, part->size.x, 8, part->color);
+            break;
+        }
+        case PART_CONE: {
+            Vector3 topOff = {part->offset.x, part->offset.y, part->offset.z + part->size.y};
+            Vector3 top = Vector3Add(pos, RotateVec3D(topOff, pitch, yaw, roll));
+            DrawCylinderEx(worldPos, top, part->size.x, part->size.z, 8, part->color);
+            break;
+        }
+    }
+}
+
+// Draw all parts of an object with full 3D rotation
+static inline void DrawObject3DRotated(Part *parts, int count, Vector3 pos,
+                                       float pitch, float yaw, float roll) {
+    for (int i = 0; i < count; i++)
+        DrawPartRotated3D(&parts[i], pos, pitch, yaw, roll);
+}
+
+// --- Particle system ---
+// Generic 3D particle with position, velocity, lifetime, color, size.
+
+typedef struct {
+    Vector3 pos;
+    Vector3 vel;
+    float life, maxLife;
+    float size;
+    Color color;
+    bool active;
+} Particle3D;
+
+// Spawn a burst of particles at a position (explosion, splash, etc.)
+// Colors cycle through: fire orange, fire yellow, gray smoke.
+static inline void SpawnParticleBurst(Particle3D *particles, int maxParticles,
+                                      Vector3 pos, int count, float speedMin, float speedMax,
+                                      float lifeMin, float lifeMax, float sizeMin, float sizeMax) {
+    for (int i = 0; i < maxParticles && count > 0; i++) {
+        if (particles[i].active) continue;
+        float a1 = (float)GetRandomValue(0, 628) / 100.0f;
+        float a2 = (float)GetRandomValue(-314, 314) / 200.0f;
+        float spd = speedMin + (float)GetRandomValue(0, 100) / 100.0f * (speedMax - speedMin);
+        particles[i].pos = pos;
+        particles[i].vel = (Vector3){
+            cosf(a1) * cosf(a2) * spd,
+            fabsf(sinf(a2)) * spd + 2.0f,
+            sinf(a1) * cosf(a2) * spd
+        };
+        int roll = GetRandomValue(0, 2);
+        if (roll == 0) particles[i].color = (Color){255, 200, 50, 255};
+        else if (roll == 1) particles[i].color = (Color){255, 100, 0, 255};
+        else particles[i].color = (Color){80, 80, 80, 200};
+        particles[i].life = lifeMin + (float)GetRandomValue(0, 100) / 100.0f * (lifeMax - lifeMin);
+        particles[i].maxLife = particles[i].life;
+        particles[i].size = sizeMin + (float)GetRandomValue(0, 100) / 100.0f * (sizeMax - sizeMin);
+        particles[i].active = true;
+        count--;
+    }
+}
+
+// Update all particles (gravity + decay)
+static inline void UpdateParticles3D(Particle3D *particles, int maxParticles, float dt, float gravity) {
+    for (int i = 0; i < maxParticles; i++) {
+        if (!particles[i].active) continue;
+        particles[i].pos = Vector3Add(particles[i].pos, Vector3Scale(particles[i].vel, dt));
+        particles[i].vel.y -= gravity * dt;
+        particles[i].life -= dt;
+        if (particles[i].life <= 0) particles[i].active = false;
+    }
+}
+
+// Draw all particles as spheres with fading alpha
+static inline void DrawParticles3D(Particle3D *particles, int maxParticles) {
+    for (int i = 0; i < maxParticles; i++) {
+        if (!particles[i].active) continue;
+        float alpha = particles[i].life / particles[i].maxLife;
+        Color c = particles[i].color;
+        c.a = (unsigned char)(alpha * c.a);
+        DrawSphere(particles[i].pos, particles[i].size * alpha, c);
+    }
+}
+
+// --- Screen shake ---
+
+typedef struct {
+    float amount;
+    float timer;
+    float decay;
+} ScreenShake;
+
+static inline void ShakeTrigger(ScreenShake *s, float amount) {
+    s->amount = amount;
+    s->timer = amount;
+}
+
+static inline void ShakeUpdate(ScreenShake *s, float dt) {
+    if (s->timer > 0) {
+        s->timer -= dt;
+        if (s->timer < 0) s->timer = 0;
+    }
+}
+
+static inline Vector2 ShakeOffset(ScreenShake *s) {
+    if (s->timer <= 0) return (Vector2){0, 0};
+    float intensity = s->timer / s->amount;
+    return (Vector2){
+        (float)GetRandomValue(-100, 100) / 100.0f * s->amount * intensity,
+        (float)GetRandomValue(-100, 100) / 100.0f * s->amount * intensity
+    };
+}
+
 // Draw a rotated cube using 12 triangles (6 faces)
 static inline void DrawCubeRotY(Vector3 center, float w, float h, float d, float rotY, Color col) {
     float hw = w/2, hh = h/2, hd = d/2;
@@ -386,6 +541,19 @@ static inline int LoadObject3D(const char *filename, Part *parts, int maxParts) 
     }
     fclose(f);
     return count;
+}
+
+// Load object from file, falling back to hardcoded defaults if missing.
+// Saves the defaults to disk on first run so they can be edited.
+static inline void LoadOrCreateObject(const char *path, Part *dest, int *destCount,
+                                      Part *fallback, int fallbackCount) {
+    *destCount = LoadObject3D(path, dest, 32);
+    if (*destCount == 0) {
+        *destCount = fallbackCount;
+        for (int i = 0; i < fallbackCount; i++) dest[i] = fallback[i];
+        MakeDirectory("objects");
+        SaveObject3D(path, dest, *destCount);
+    }
 }
 
 #endif // OBJECTS3D_H

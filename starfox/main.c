@@ -73,15 +73,7 @@ static int arwingPartCount = 0;
 static Part enemyParts[MAX_OBJ_PARTS];
 static int enemyPartCount = 0;
 
-void LoadOrCreate(const char *path, Part *dest, int *destCount, Part *fallback, int fallbackCount) {
-    *destCount = LoadObject3D(path, dest, MAX_OBJ_PARTS);
-    if (*destCount == 0) {
-        *destCount = fallbackCount;
-        for (int i = 0; i < fallbackCount; i++) dest[i] = fallback[i];
-        MakeDirectory("objects");
-        SaveObject3D(path, dest, *destCount);
-    }
-}
+#define LoadOrCreate LoadOrCreateObject
 
 // --- Game types ---
 
@@ -135,68 +127,11 @@ typedef struct {
     bool active;
 } Particle;
 
-// --- Rotate by pitch/yaw/roll ---
-Vector3 RotateVec(Vector3 v, float pitch, float yaw, float roll) {
-    // Roll (Z axis)
-    float cr = cosf(roll), sr = sinf(roll);
-    float x1 = v.x * cr - v.y * sr;
-    float y1 = v.x * sr + v.y * cr;
-    // Pitch (X axis)
-    float cp = cosf(pitch), sp = sinf(pitch);
-    float y2 = y1 * cp - v.z * sp;
-    float z2 = y1 * sp + v.z * cp;
-    // Yaw (Y axis)
-    float cy = cosf(yaw), sy = sinf(yaw);
-    float x3 = x1 * cy + z2 * sy;
-    float z3 = -x1 * sy + z2 * cy;
-    return (Vector3){x3, y2, z3};
-}
-
-void DrawCubeRotated(Vector3 center, float w, float h, float d,
-                     float pitch, float yaw, float roll, Color col) {
-    Vector3 corners[8] = {
-        {-w/2,-h/2,-d/2},{w/2,-h/2,-d/2},{w/2,h/2,-d/2},{-w/2,h/2,-d/2},
-        {-w/2,-h/2,d/2},{w/2,-h/2,d/2},{w/2,h/2,d/2},{-w/2,h/2,d/2}
-    };
-    for (int c = 0; c < 8; c++)
-        corners[c] = Vector3Add(center, RotateVec(corners[c], pitch, yaw, roll));
-    int faces[6][4] = {{0,1,2,3},{4,5,6,7},{0,4,7,3},{1,5,6,2},{0,1,5,4},{3,2,6,7}};
-    for (int f = 0; f < 6; f++) {
-        DrawTriangle3D(corners[faces[f][0]], corners[faces[f][1]], corners[faces[f][2]], col);
-        DrawTriangle3D(corners[faces[f][0]], corners[faces[f][2]], corners[faces[f][3]], col);
-        DrawTriangle3D(corners[faces[f][2]], corners[faces[f][1]], corners[faces[f][0]], col);
-        DrawTriangle3D(corners[faces[f][3]], corners[faces[f][2]], corners[faces[f][0]], col);
-    }
-}
-
-void DrawShip(Part *parts, int count, Vector3 pos, float pitch, float yaw, float roll) {
-    for (int i = 0; i < count; i++) {
-        Part *part = parts + i;
-        Vector3 rotOffset = RotateVec(part->offset, pitch, yaw, roll);
-        Vector3 worldPos = Vector3Add(pos, rotOffset);
-        switch (part->type) {
-            case PART_CUBE:
-                DrawCubeRotated(worldPos, part->size.x, part->size.y, part->size.z,
-                    pitch, yaw, roll, part->color);
-                break;
-            case PART_SPHERE:
-                DrawSphere(worldPos, part->size.x, part->color);
-                break;
-            case PART_CYLINDER: {
-                Vector3 topOffset = {part->offset.x, part->offset.y, part->offset.z + part->size.y};
-                Vector3 top = Vector3Add(pos, RotateVec(topOffset, pitch, yaw, roll));
-                DrawCylinderEx(worldPos, top, part->size.x, part->size.x, 8, part->color);
-                break;
-            }
-            case PART_CONE: {
-                Vector3 topOffset = {part->offset.x, part->offset.y, part->offset.z + part->size.y};
-                Vector3 top = Vector3Add(pos, RotateVec(topOffset, pitch, yaw, roll));
-                DrawCylinderEx(worldPos, top, part->size.x, part->size.z, 8, part->color);
-                break;
-            }
-        }
-    }
-}
+// Use common library functions
+#define RotateVec RotateVec3D
+#define DrawCubeRotated DrawCubeRotated3D
+#define DrawShip(parts, count, pos, pitch, yaw, roll) \
+    DrawObject3DRotated(parts, count, pos, pitch, yaw, roll)
 
 // --- Globals ---
 static Player player;

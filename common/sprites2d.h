@@ -723,6 +723,22 @@ static inline void PuppetDrawBoxes(PuppetState *s, float x, float y, float scale
     }
 }
 
+// --- HUD helpers ---
+
+// Draw a progress/HP bar with background, fill, and border
+static inline void DrawProgressBar(float x, float y, float w, float h,
+                                   float value, float maxValue, bool rightToLeft) {
+    float pct = value / maxValue;
+    if (pct < 0) pct = 0; if (pct > 1) pct = 1;
+    Color fillCol = pct > 0.5f ? (Color){50, 200, 80, 255} :
+                    pct > 0.25f ? (Color){240, 200, 40, 255} : (Color){220, 40, 40, 255};
+    DrawRectangle(x, y, w, h, (Color){30, 30, 40, 255});
+    int fillW = (int)(w * pct);
+    if (rightToLeft) DrawRectangle(x + w - fillW, y, fillW, h, fillCol);
+    else DrawRectangle(x, y, fillW, h, fillCol);
+    DrawRectangleLines(x, y, w, h, (Color){80, 80, 100, 255});
+}
+
 // --- Prefab sprites ---
 
 // Simple character (~60px tall at scale 1)

@@ -560,38 +560,9 @@ void UpdateBoat(Boat *b, int boatIdx, float dt) {
 }
 
 // Rotate vector by roll, pitch, yaw (in that order)
-Vector3 BoatRotateVec(Vector3 v, float pitch, float yaw, float roll) {
-    // Roll (Z axis)
-    float cr = cosf(roll), sr = sinf(roll);
-    float x1 = v.x * cr - v.y * sr;
-    float y1 = v.x * sr + v.y * cr;
-    // Pitch (X axis)
-    float cp = cosf(pitch), sp = sinf(pitch);
-    float y2 = y1 * cp - v.z * sp;
-    float z2 = y1 * sp + v.z * cp;
-    // Yaw (Y axis)
-    float cy = cosf(yaw), sy = sinf(yaw);
-    float x3 = x1 * cy + z2 * sy;
-    float z3 = -x1 * sy + z2 * cy;
-    return (Vector3){x3, y2, z3};
-}
-
-void DrawCubeRotated(Vector3 center, float w, float h, float d,
-                     float pitch, float yaw, float roll, Color col) {
-    Vector3 corners[8] = {
-        {-w/2,-h/2,-d/2},{w/2,-h/2,-d/2},{w/2,h/2,-d/2},{-w/2,h/2,-d/2},
-        {-w/2,-h/2,d/2},{w/2,-h/2,d/2},{w/2,h/2,d/2},{-w/2,h/2,d/2}
-    };
-    for (int c = 0; c < 8; c++)
-        corners[c] = Vector3Add(center, BoatRotateVec(corners[c], pitch, yaw, roll));
-    int faces[6][4] = {{0,1,2,3},{4,5,6,7},{0,4,7,3},{1,5,6,2},{0,1,5,4},{3,2,6,7}};
-    for (int f = 0; f < 6; f++) {
-        DrawTriangle3D(corners[faces[f][0]], corners[faces[f][1]], corners[faces[f][2]], col);
-        DrawTriangle3D(corners[faces[f][0]], corners[faces[f][2]], corners[faces[f][3]], col);
-        DrawTriangle3D(corners[faces[f][2]], corners[faces[f][1]], corners[faces[f][0]], col);
-        DrawTriangle3D(corners[faces[f][3]], corners[faces[f][2]], corners[faces[f][0]], col);
-    }
-}
+// Use common library functions
+#define BoatRotateVec RotateVec3D
+#define DrawCubeRotated DrawCubeRotated3D
 
 void DrawBoatModel(Boat *b) {
     float pitch = b->pitch, yaw = b->rotation, roll = b->roll;
