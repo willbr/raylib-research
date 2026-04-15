@@ -25,12 +25,13 @@ typedef enum {
     PART_CUBE,
     PART_SPHERE,
     PART_CYLINDER,
+    PART_CONE,      // tapered cylinder: size = (bottomRadius, height, topRadius)
 } PartType;
 
 typedef struct {
     PartType type;
     Vector3 offset;   // position relative to object origin
-    Vector3 size;     // cube: (w, h, d), sphere: (radius, -, -), cylinder: (radius, height, -)
+    Vector3 size;     // cube: (w, h, d), sphere: (radius, -, -), cylinder: (radius, height, -), cone: (botR, height, topR)
     Color color;
     bool wireframe;   // draw wireframe overlay
 } Part;
@@ -63,6 +64,11 @@ typedef struct {
 // Cylinder grows upward from offset.y to offset.y + height
 #define CYL(ox,oy,oz, r,h, col) \
     { PART_CYLINDER, {ox,oy,oz}, {r,h,0}, col, false }
+
+// CONE(offsetX, offsetY, offsetZ, bottomRadius, height, topRadius, color)
+// Tapered cylinder: grows upward, narrows from bottomRadius to topRadius
+#define CONE(ox,oy,oz, br,h,tr, col) \
+    { PART_CONE, {ox,oy,oz}, {br,h,tr}, col, false }
 
 // Object from parts array, position, and Y rotation
 #define OBJ(partsArr, position, rotation) \
@@ -131,6 +137,15 @@ static inline void DrawPart(Part *p, Vector3 origin, float rotY) {
                     (Color){ p->color.r/2, p->color.g/2, p->color.b/2, 255 });
             break;
         }
+        case PART_CONE: {
+            Vector3 base = worldPos;
+            Vector3 top = { worldPos.x, worldPos.y + p->size.y, worldPos.z };
+            DrawCylinderEx(base, top, p->size.x, p->size.z, 8, p->color);
+            if (p->wireframe)
+                DrawCylinderWiresEx(base, top, p->size.x, p->size.z, 8,
+                    (Color){ p->color.r/2, p->color.g/2, p->color.b/2, 255 });
+            break;
+        }
     }
 }
 
@@ -173,6 +188,14 @@ static inline void DrawPartScaled3(Part *p, Vector3 origin, float rotY, Vector3 
             DrawCylinderEx(worldPos, top, rx, rx, 8, p->color);
             break;
         }
+        case PART_CONE: {
+            float rBot = p->size.x * (scale.x + scale.z) / 2.0f;
+            float rTop = p->size.z * (scale.x + scale.z) / 2.0f;
+            float hy = p->size.y * scale.y;
+            Vector3 top = { worldPos.x, worldPos.y + hy, worldPos.z };
+            DrawCylinderEx(worldPos, top, rBot, rTop, 8, p->color);
+            break;
+        }
     }
 }
 
@@ -201,6 +224,7 @@ static inline void DrawObject3DShadow(Object3D *obj, float groundY) {
                              p->size.x, (Vector3){1,0,0}, 90, shadowCol);
                 break;
             case PART_CYLINDER:
+            case PART_CONE:
                 DrawCircle3D((Vector3){worldPos.x, groundY + 0.01f, worldPos.z},
                              p->size.x, (Vector3){1,0,0}, 90, shadowCol);
                 break;
@@ -297,6 +321,12 @@ static inline bool SaveObject3D(const char *filename, Part *parts, int count) {
                     p->size.x, p->size.y,
                     p->color.r, p->color.g, p->color.b, p->color.a);
                 break;
+            case PART_CONE:
+                fprintf(f, "cone %.3f %.3f %.3f  %.3f %.3f %.3f  %d %d %d %d\n",
+                    p->offset.x, p->offset.y, p->offset.z,
+                    p->size.x, p->size.y, p->size.z,
+                    p->color.r, p->color.g, p->color.b, p->color.a);
+                break;
         }
     }
     fclose(f);
@@ -340,6 +370,15 @@ static inline int LoadObject3D(const char *filename, Part *parts, int maxParts) 
                 &r, &g, &b, &a) == 9) {
                 p->type = PART_CYLINDER;
                 p->size.z = 0;
+                p->color = (Color){r, g, b, a};
+                count++;
+            }
+        } else if (strncmp(line, "cone ", 5) == 0) {
+            if (sscanf(line + 5, "%f %f %f %f %f %f %d %d %d %d",
+                &p->offset.x, &p->offset.y, &p->offset.z,
+                &p->size.x, &p->size.y, &p->size.z,
+                &r, &g, &b, &a) == 10) {
+                p->type = PART_CONE;
                 p->color = (Color){r, g, b, a};
                 count++;
             }
