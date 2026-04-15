@@ -166,12 +166,20 @@ static int polyVertCount = 0;
 static bool polyDrawing = false;
 static float lastLineWidth = 2.0f;  // remembered line thickness
 static Color selectedColor = {230, 41, 55, 255};  // current drawing color (default red)
+static float build2dZoom = 3.0f;    // canvas zoom level
+static Vector2 build2dPan = {0};    // canvas pan offset
 static bool drawing2d = false;     // currently dragging to create a shape
 static Vector2 drawStart = {0};    // where the drag started (screen coords)
 static int triVertex = 0;          // 0-2: which triangle vertex we're placing next
 static Vector3 buildCursor = {0, 0.5f, 0};  // where new parts spawn
 
 // --- Puppet editor state ---
+#define MAX_RIG_FILES 16
+static char rigFiles[MAX_RIG_FILES][128];
+static int numRigFiles = 0;
+static int selectedRigFile = -1;
+static bool rigFilesScanned = false;
+
 static PuppetRig puppetRig;
 static PuppetAnim puppetAnims[12];
 static int numPuppetAnims = 0;
@@ -183,6 +191,8 @@ static PuppetState puppetPreview;
 static float puppetPlayTimer = 0;
 static char puppetRigPath[128] = {0};
 static char puppetAnimDir[128] = {0};
+static int puppetEditingPart = -1;  // which puppet part we're editing in build2d (-1 = none)
+static char puppetEditPath[128] = {0};  // full path to the .spr2d being edited
 static int puppetDragging = -1;  // part being dragged
 static Vector2 puppetDragStart = {0};
 static float puppetZoom = 3.0f;
@@ -195,7 +205,36 @@ static const char *puppetAnimNames[] = {
 };
 static const int NUM_PUPPET_ANIM_NAMES = 12;
 
+void ScanForRigFiles(void) {
+    numRigFiles = 0;
+    const char *searchDirs[] = {"fighter/sprites/ryu", "fighter/sprites/ken",
+        "pokemon/sprites", "objects", "."};
+    for (int sd = 0; sd < 5; sd++) {
+        if (!DirectoryExists(searchDirs[sd])) continue;
+        FilePathList files = LoadDirectoryFiles(searchDirs[sd]);
+        for (int fi = 0; fi < (int)files.count && numRigFiles < MAX_RIG_FILES; fi++) {
+            if (IsFileExtension(files.paths[fi], ".rig2d")) {
+                strncpy(rigFiles[numRigFiles], files.paths[fi], 127);
+                numRigFiles++;
+            }
+        }
+        UnloadDirectoryFiles(files);
+    }
+    rigFilesScanned = true;
+}
+
 void LoadPuppetForEdit(const char *rigPath) {
+    // Full reset
+    memset(&puppetRig, 0, sizeof(puppetRig));
+    memset(puppetAnims, 0, sizeof(puppetAnims));
+    numPuppetAnims = 0;
+    currentPuppetAnim = 0;
+    currentPuppetFrame = 0;
+    selectedPuppetPart = -1;
+    puppetPlaying = false;
+    puppetPlayTimer = 0;
+    puppetDragging = -1;
+
     strncpy(puppetRigPath, rigPath, 127);
     // Derive directory from rig path
     strncpy(puppetAnimDir, rigPath, 127);
@@ -1446,7 +1485,44 @@ int main(void) {
             if (IsKeyPressed(KEY_FIVE)) build2dPrimitive = 4;  // ellipse
             if (IsKeyPressed(KEY_SIX)) build2dPrimitive = 5;   // polygon
 
-            int cx = sw / 2, cy = sh / 2;
+            // Canvas origin in screen space (center + pan)
+            float cx = sw / 2.0f + build2dPan.x;
+            float cy = sh / 2.0f + build2dPan.y;
+            float zm = build2dZoom;
+
+            // Zoom with scroll (when shift NOT held and nothing selected or ctrl held)
+            if (!IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_LEFT_CONTROL)) {
+                float wheel = GetMouseWheelMove();
+                if (wheel != 0 && !overUI && !drawing2d) {
+                    if (IsKeyDown(KEY_LEFT_CONTROL) || build2d.selected < 0) {
+                        // Zoom toward mouse position
+                        float oldZoom = build2dZoom;
+                        build2dZoom += wheel * 0.3f;
+                        if (build2dZoom < 0.5f) build2dZoom = 0.5f;
+                        if (build2dZoom > 10.0f) build2dZoom = 10.0f;
+                        // Adjust pan so zoom centers on mouse
+                        float zoomRatio = build2dZoom / oldZoom;
+                        build2dPan.x = mouse.x - (mouse.x - build2dPan.x) * zoomRatio - (sw/2.0f - build2dPan.x) * (zoomRatio - 1);
+                        build2dPan.y = mouse.y - (mouse.y - build2dPan.y) * zoomRatio - (sh/2.0f - build2dPan.y) * (zoomRatio - 1);
+                        zm = build2dZoom;
+                        cx = sw / 2.0f + build2dPan.x;
+                        cy = sh / 2.0f + build2dPan.y;
+                    }
+                }
+            }
+
+            // Pan with middle mouse
+            if (IsMouseButtonDown(MOUSE_MIDDLE_BUTTON)) {
+                Vector2 delta = GetMouseDelta();
+                build2dPan.x += delta.x;
+                build2dPan.y += delta.y;
+                cx = sw / 2.0f + build2dPan.x;
+                cy = sh / 2.0f + build2dPan.y;
+            }
+
+            // Convert mouse to canvas coords (sprite space)
+            float mouseCanvasX = (mouse.x - cx) / zm;
+            float mouseCanvasY = (mouse.y - cy) / zm;
             bool shiftHeld = IsKeyDown(KEY_LEFT_SHIFT);
             if (shiftHeld) {
                 // --- Shift: select and move existing parts ---
@@ -1457,9 +1533,8 @@ int main(void) {
                         Sprite2DPart *sp = &build2d.parts[i];
                         float d;
                         if (sp->type == SP_LINE) {
-                            // Distance to line segment
-                            Vector2 a = {cx + sp->x, cy + sp->y};
-                            Vector2 b = {cx + sp->w, cy + sp->h};
+                            Vector2 a = {cx + sp->x * zm, cy + sp->y * zm};
+                            Vector2 b = {cx + sp->w * zm, cy + sp->h * zm};
                             Vector2 ab = {b.x - a.x, b.y - a.y};
                             float t = ((mouse.x - a.x)*ab.x + (mouse.y - a.y)*ab.y) /
                                       (ab.x*ab.x + ab.y*ab.y + 0.001f);
@@ -1467,26 +1542,24 @@ int main(void) {
                             Vector2 closest = {a.x + t*ab.x, a.y + t*ab.y};
                             d = Vector2Distance(mouse, closest);
                         } else if (sp->type == SP_TRIANGLE) {
-                            // Check distance to centroid of triangle
-                            float tx = (sp->x + sp->w + sp->extra1) / 3.0f;
-                            float ty = (sp->y + sp->h + sp->extra2) / 3.0f;
-                            d = Vector2Distance(mouse, (Vector2){cx + tx, cy + ty});
+                            float ttx = (sp->x + sp->w + sp->extra1) / 3.0f;
+                            float tty = (sp->y + sp->h + sp->extra2) / 3.0f;
+                            d = Vector2Distance(mouse, (Vector2){cx + ttx * zm, cy + tty * zm});
                         } else {
-                            d = Vector2Distance(mouse, (Vector2){cx + sp->x, cy + sp->y});
+                            d = Vector2Distance(mouse, (Vector2){cx + sp->x * zm, cy + sp->y * zm});
                         }
                         if (d < bestD) { bestD = d; build2d.selected = i; }
                     }
                 }
                 if (build2d.selected >= 0 && IsMouseButtonDown(MOUSE_LEFT_BUTTON) && !overUI) {
                     Vector2 delta = GetMouseDelta();
-                    build2d.parts[build2d.selected].x += delta.x;
-                    build2d.parts[build2d.selected].y += delta.y;
+                    build2d.parts[build2d.selected].x += delta.x / zm;
+                    build2d.parts[build2d.selected].y += delta.y / zm;
                 }
             } else if (build2dPrimitive == 2 && triVertex > 0) {
                 // --- Triangle: third vertex tracks mouse until clicked ---
                 Sprite2DPart *sp = &build2d.parts[build2d.selected];
-                float mx = mouse.x - cx, my = mouse.y - cy;
-                sp->extra1 = mx; sp->extra2 = my;  // preview third vertex at cursor
+                sp->extra1 = mouseCanvasX; sp->extra2 = mouseCanvasY;  // preview third vertex at cursor
 
                 if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !overUI) {
                     triVertex = 0;  // finalize
@@ -1502,16 +1575,16 @@ int main(void) {
                     // Check double-click on last vertex
                     if (polyVertCount >= 3) {
                         float distToLast = Vector2Distance(mouse,
-                            (Vector2){cx + polyVerts[polyVertCount-1].x, cy + polyVerts[polyVertCount-1].y});
+                            (Vector2){cx + polyVerts[polyVertCount-1].x * zm, cy + polyVerts[polyVertCount-1].y * zm});
                         float distToFirst = Vector2Distance(mouse,
-                            (Vector2){cx + polyVerts[0].x, cy + polyVerts[0].y});
+                            (Vector2){cx + polyVerts[0].x * zm, cy + polyVerts[0].y * zm});
                         if (distToLast < 15 || distToFirst < 15) {
                             finishPoly = true;
                         } else if (polyVertCount < MAX_POLY_VERTS) {
-                            polyVerts[polyVertCount++] = (Vector2){ mouse.x - cx, mouse.y - cy };
+                            polyVerts[polyVertCount++] = (Vector2){ mouseCanvasX, mouseCanvasY };
                         }
                     } else if (polyVertCount < MAX_POLY_VERTS) {
-                        polyVerts[polyVertCount++] = (Vector2){ mouse.x - cx, mouse.y - cy };
+                        polyVerts[polyVertCount++] = (Vector2){ mouseCanvasX, mouseCanvasY };
                     }
                 }
 
@@ -1571,10 +1644,10 @@ int main(void) {
 
                 if (drawing2d && IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
                     Sprite2DPart *sp = &build2d.parts[build2d.selected];
-                    float dx = mouse.x - drawStart.x;
-                    float dy = mouse.y - drawStart.y;
-                    float sx = drawStart.x - cx, sy = drawStart.y - cy;
-                    float ex = mouse.x - cx, ey = mouse.y - cy;
+                    float dx = (mouse.x - drawStart.x) / zm;
+                    float dy = (mouse.y - drawStart.y) / zm;
+                    float sx = (drawStart.x - cx) / zm, sy = (drawStart.y - cy) / zm;
+                    float ex = mouseCanvasX, ey = mouseCanvasY;
 
                     switch (build2dPrimitive) {
                         case 0: // Rect
@@ -1622,8 +1695,8 @@ int main(void) {
                 }
             }
 
-            // Resize selected with scroll
-            if (build2d.selected >= 0 && !drawing2d) {
+            // Resize selected with shift+scroll
+            if (build2d.selected >= 0 && !drawing2d && IsKeyDown(KEY_LEFT_SHIFT)) {
                 float wheel = GetMouseWheelMove();
                 if (wheel != 0) {
                     Sprite2DPart *sp = &build2d.parts[build2d.selected];
@@ -1658,6 +1731,17 @@ int main(void) {
 
             // Save sprite to file
             if (IsKeyPressed(KEY_ENTER) && build2d.count > 0) {
+                // If editing a puppet part, save back to its .spr2d and return
+                if (puppetEditingPart >= 0) {
+                    SaveSprite2D(puppetEditPath, build2d.parts, build2d.count);
+                    // Update the rig part in memory
+                    RigPart *rp = &puppetRig.parts[puppetEditingPart];
+                    rp->partCount = build2d.count;
+                    for (int pi = 0; pi < build2d.count && pi < MAX_RIG_SPRITE_PARTS; pi++)
+                        rp->parts[pi] = build2d.parts[pi];
+                    puppetEditingPart = -1;
+                    mode = MODE_PUPPET;
+                } else {
                 char path[64];
                 snprintf(path, sizeof(path), "objects/%s.spr2d", build2d.name);
                 for (char *c = path + 8; *c && *c != '.'; c++) if (*c == ' ') *c = '_';
@@ -1708,7 +1792,8 @@ int main(void) {
                 }
 
                 showExport = true;
-            }
+            } // end else (normal sprite save)
+            } // end if ENTER
         }
 
         // Undo last placed (Ctrl+Z)
@@ -1747,23 +1832,27 @@ int main(void) {
 
         if (mode == MODE_BUILD2D) {
             // --- 2D Build workspace ---
-            int cx = sw / 2, cy = sh / 2;
+            float cx = sw / 2.0f + build2dPan.x, cy = sh / 2.0f + build2dPan.y;
             // Grid
             for (int gx = -200; gx <= 200; gx += 20) {
+                float sgx = gx * build2dZoom;
                 Color gc = (gx == 0) ? (Color){80,80,90,255} : (Color){45,45,50,255};
-                DrawLine(cx + gx, cy - 200, cx + gx, cy + 200, gc);
+                DrawLine(cx + sgx, 0, cx + sgx, sh, gc);
             }
             for (int gy = -200; gy <= 200; gy += 20) {
+                float sgy = gy * build2dZoom;
                 Color gc = (gy == 0) ? (Color){80,80,90,255} : (Color){45,45,50,255};
-                DrawLine(cx - 200, cy + gy, cx + 200, cy + gy, gc);
+                DrawLine(0, cy + sgy, sw, cy + sgy, gc);
             }
             // Origin crosshair
-            DrawLine(cx - 8, cy, cx + 8, cy, RED);
-            DrawLine(cx, cy - 8, cx, cy + 8, GREEN);
+            DrawLine(cx - 12, cy, cx + 12, cy, RED);
+            DrawLine(cx, cy - 12, cx, cy + 12, GREEN);
+            // Zoom indicator
+            DrawText(TextFormat("Zoom: %.1fx", build2dZoom), sw - 120, sh - 20, 12, (Color){100,100,120,255});
 
             // Draw all 2D parts
             for (int i = 0; i < build2d.count; i++) {
-                DrawSprite2DPart(&build2d.parts[i], cx, cy, 1.0f);
+                DrawSprite2DPart(&build2d.parts[i], cx, cy, build2dZoom);
                 // Selected highlight: draw corner handles instead of full overlay
                 if (i == build2d.selected) {
                     Sprite2DPart *sp = &build2d.parts[i];
@@ -1775,7 +1864,7 @@ int main(void) {
                             break;
                         }
                         default:
-                            DrawSprite2DPartOutline(sp, cx, cy, 1.0f, YELLOW);
+                            DrawSprite2DPartOutline(sp, cx, cy, build2dZoom, YELLOW);
                             break;
                     }
                 }
@@ -1791,11 +1880,11 @@ int main(void) {
                             (Vector2){cx + polyVerts[v].x, cy + polyVerts[v].y}, 2, YELLOW);
                 }
                 DrawLineEx(
-                    (Vector2){cx + polyVerts[polyVertCount-1].x, cy + polyVerts[polyVertCount-1].y},
+                    (Vector2){cx + polyVerts[polyVertCount-1].x * build2dZoom, cy + polyVerts[polyVertCount-1].y * build2dZoom},
                     mouse, 2, (Color){255,255,0,120});
                 if (polyVertCount >= 2) {
                     DrawLineEx(mouse,
-                        (Vector2){cx + polyVerts[0].x, cy + polyVerts[0].y}, 1, (Color){255,255,0,60});
+                        (Vector2){cx + polyVerts[0].x * build2dZoom, cy + polyVerts[0].y * build2dZoom}, 1, (Color){255,255,0,60});
                     for (int t = 0; t < polyVertCount - 1; t++) {
                         DrawTriangle(
                             (Vector2){cx+polyVerts[0].x, cy+polyVerts[0].y},
@@ -2300,7 +2389,10 @@ int main(void) {
             DrawText("Shift+click: Select/move", 10, sh - 90, 10, (Color){120,120,130,255});
             DrawText("Scroll: Resize selected", 10, sh - 75, 10, (Color){120,120,130,255});
             DrawText("[DEL] Remove  [ESC] Deselect", 10, sh - 60, 10, (Color){120,120,130,255});
-            DrawText(TextFormat("[ENTER] Save as \"%s\"", build2d.name), 10, sh - 45, 10, GOLD);
+            if (puppetEditingPart >= 0)
+                DrawText(TextFormat("[ENTER] Save to %s & return", GetFileName(puppetEditPath)), 10, sh - 45, 10, GOLD);
+            else
+                DrawText(TextFormat("[ENTER] Save as \"%s\"", build2d.name), 10, sh - 45, 10, GOLD);
 
         } else if (mode == MODE_TILES) {
             DrawText("Tile Palette:", 10, 55, 12, WHITE);
@@ -2482,14 +2574,14 @@ int main(void) {
             DrawLine((int)pcx, (int)pcy - 20, (int)pcx, (int)pcy + 20, (Color){60, 60, 80, 150});
 
             if (puppetRig.partCount > 0 && numPuppetAnims > 0 && !textActive && !showModeMenu) {
+                if (currentPuppetAnim >= numPuppetAnims) currentPuppetAnim = 0;
                 PuppetAnim *ca = &puppetAnims[currentPuppetAnim];
-                // Clamp frame to valid range
-                if (ca->frameCount <= 0) ca->frameCount = 1;
                 if (currentPuppetFrame >= ca->frameCount) currentPuppetFrame = 0;
-                PuppetKeyframe *kf = &ca->frames[currentPuppetFrame];
+                if (ca->frameCount <= 0) ca = NULL;
+                PuppetKeyframe *kf = ca ? &ca->frames[currentPuppetFrame] : NULL;
 
                 // Playback
-                if (puppetPlaying && ca->frameCount > 1) {
+                if (kf && puppetPlaying && ca && ca->frameCount > 1) {
                     puppetPlayTimer += GetFrameTime();
                     float dur = kf->duration > 0 ? kf->duration : 0.15f;
                     if (puppetPlayTimer >= dur) {
@@ -2500,6 +2592,7 @@ int main(void) {
                 }
 
                 // Draw puppet at current frame
+                if (!kf) goto puppet_ui;
                 PuppetState ps = {0};
                 ps.rig = &puppetRig;
                 ps.anim = ca;
@@ -2587,10 +2680,42 @@ int main(void) {
                     if (IsKeyPressed(KEY_H) && selectedPuppetPart >= 0)
                         kf->poses[selectedPuppetPart].visible = !kf->poses[selectedPuppetPart].visible;
 
+                    // Edit selected part's sprite in Build 2D mode
+                    if (IsKeyPressed(KEY_E) && selectedPuppetPart >= 0) {
+                        RigPart *rp = &puppetRig.parts[selectedPuppetPart];
+                        // Load sprite into build2d
+                        build2d.count = rp->partCount;
+                        for (int pi = 0; pi < rp->partCount && pi < MAX_BUILD2D_PARTS; pi++)
+                            build2d.parts[pi] = rp->parts[pi];
+                        build2d.selected = -1;
+                        strncpy(build2d.name, rp->name, 31);
+                        // Remember what we're editing
+                        puppetEditingPart = selectedPuppetPart;
+                        snprintf(puppetEditPath, sizeof(puppetEditPath), "%s%s.spr2d",
+                            puppetAnimDir, rp->name);
+                        // Find the actual spr2d filename from the rig file
+                        FILE *rigF = fopen(puppetRigPath, "r");
+                        if (rigF) {
+                            char rigLine[256];
+                            while (fgets(rigLine, sizeof(rigLine), rigF)) {
+                                char pname[16], pfile[64];
+                                if (sscanf(rigLine, "part %15s %63s", pname, pfile) == 2 &&
+                                    strcmp(pname, rp->name) == 0) {
+                                    snprintf(puppetEditPath, sizeof(puppetEditPath), "%s%s",
+                                        puppetAnimDir, pfile);
+                                    break;
+                                }
+                            }
+                            fclose(rigF);
+                        }
+                        mode = MODE_BUILD2D;
+                    }
+
                     // Save with Ctrl+S
                     if ((IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_LEFT_SUPER)) && IsKeyPressed(KEY_S))
                         SavePuppetAnim(currentPuppetAnim);
                 }
+                puppet_ui: (void)0;
                 // Play/pause toggle (works whether playing or not)
                 if (IsKeyPressed(KEY_SPACE)) puppetPlaying = !puppetPlaying;
             }
@@ -2599,19 +2724,62 @@ int main(void) {
             DrawRectangle(0, 0, 200, sh, (Color){25, 25, 35, 240});
             DrawText("PUPPET EDITOR", 10, 10, 14, WHITE);
 
-            // Rig info
-            if (puppetRig.partCount > 0) {
-                DrawText(TextFormat("Rig: %d parts", puppetRig.partCount), 10, 30, 10, (Color){150,150,150,255});
+            // Rig file selector
+            DrawText("Rig:", 10, 30, 10, (Color){150,150,150,255});
+            if (numRigFiles == 0) {
+                DrawText("No .rig2d files found!", 10, 44, 10, RED);
             } else {
-                DrawText("No rig loaded!", 10, 30, 10, RED);
-                DrawText("Place a .rig2d file", 10, 44, 10, (Color){150,150,150,255});
-                DrawText("and restart editor", 10, 56, 10, (Color){150,150,150,255});
+                for (int i = 0; i < numRigFiles; i++) {
+                    int ry = 44 + i * 18;
+                    bool sel = (i == selectedRigFile);
+                    Rectangle rr = {8, ry, 184, 16};
+                    bool hov = CheckCollisionPointRec(mouse, rr);
+                    DrawRectangleRec(rr, sel ? (Color){50,45,25,255} : (hov ? (Color){40,40,55,255} : (Color){28,28,40,255}));
+                    if (sel) DrawRectangleLinesEx(rr, 1, GOLD);
+                    if (hov && IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && i != selectedRigFile) {
+                        selectedRigFile = i;
+                        LoadPuppetForEdit(rigFiles[i]);
+                    }
+                    // Show just the filename, not full path
+                    const char *fname = GetFileName(rigFiles[i]);
+                    // Also show parent dir
+                    char label[64];
+                    const char *dir = rigFiles[i];
+                    const char *slash = strrchr(dir, '/');
+                    if (slash) {
+                        const char *prevSlash = slash - 1;
+                        while (prevSlash > dir && *prevSlash != '/') prevSlash--;
+                        if (*prevSlash == '/') prevSlash++;
+                        int dirLen = (int)(slash - prevSlash);
+                        if (dirLen > 20) dirLen = 20;
+                        snprintf(label, sizeof(label), "%.*s/%s", dirLen, prevSlash, fname);
+                    } else {
+                        snprintf(label, sizeof(label), "%s", fname);
+                    }
+                    DrawText(label, 14, ry + 2, 10, sel ? WHITE : (Color){180,180,180,255});
+                }
+            }
+            int rigListBottom = 44 + numRigFiles * 18 + 6;
+
+            // Reload button + rig info
+            if (puppetRig.partCount > 0) {
+                DrawText(TextFormat("%d parts  |  %s", puppetRig.partCount, puppetAnimDir), 10, rigListBottom, 9, (Color){120,120,140,255});
+                rigListBottom += 14;
+                Rectangle reloadBtn = {8, rigListBottom, 90, 16};
+                bool rHov = CheckCollisionPointRec(mouse, reloadBtn);
+                DrawRectangleRec(reloadBtn, rHov ? (Color){60,55,30,255} : (Color){40,40,55,255});
+                DrawRectangleLinesEx(reloadBtn, 1, (Color){100,100,120,255});
+                DrawText("[R] Reload", 14, rigListBottom + 2, 10, rHov ? WHITE : (Color){150,150,150,255});
+                if ((rHov && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) || (IsKeyPressed(KEY_R) && !textActive && !showModeMenu)) {
+                    LoadPuppetForEdit(puppetRigPath);
+                }
+                rigListBottom += 22;
             }
 
             // Animation list
-            DrawText("Animations:", 10, 55, 10, WHITE);
+            DrawText("Animations:", 10, rigListBottom, 10, WHITE);
             for (int i = 0; i < numPuppetAnims; i++) {
-                int ay = 70 + i * 20;
+                int ay = rigListBottom + 14 + i * 20;
                 bool sel = (i == currentPuppetAnim);
                 DrawRectangle(8, ay, 184, 18, sel ? (Color){50,50,70,255} : (Color){30,30,45,255});
                 if (sel) DrawRectangleLinesEx((Rectangle){8, ay, 184, 18}, 1, GOLD);
@@ -2631,7 +2799,7 @@ int main(void) {
             if (numPuppetAnims > 0) {
                 PuppetAnim *ca = &puppetAnims[currentPuppetAnim];
                 PuppetKeyframe *kf = &ca->frames[currentPuppetFrame];
-                int fy = 76 + numPuppetAnims * 20;
+                int fy = rigListBottom + 20 + numPuppetAnims * 20;
                 DrawText(TextFormat("Frame: %d/%d", currentPuppetFrame + 1, ca->frameCount), 10, fy, 12, WHITE);
                 DrawText(TextFormat("Duration: %.2fs", kf->duration), 10, fy + 16, 10, (Color){150,150,180,255});
                 DrawText(TextFormat("Loop: %s", ca->loop ? "yes" : "no"), 10, fy + 30, 10, (Color){150,150,180,255});
@@ -2703,9 +2871,9 @@ int main(void) {
             DrawText("[N] New frame", 10, sh - 102, 10, (Color){100,100,120,255});
             DrawText("[DEL] Delete frame", 10, sh - 88, 10, (Color){100,100,120,255});
             DrawText("[H] Toggle part vis", 10, sh - 74, 10, (Color){100,100,120,255});
-            DrawText("[Ctrl+S] Save anim", 10, sh - 60, 10, GOLD);
-            DrawText("Scroll: zoom", 10, sh - 46, 10, (Color){100,100,120,255});
-            DrawText("Mid-click: pan", 10, sh - 32, 10, (Color){100,100,120,255});
+            DrawText("[E] Edit part sprite", 10, sh - 60, 10, (Color){100,100,120,255});
+            DrawText("[Ctrl+S] Save anim", 10, sh - 46, 10, GOLD);
+            DrawText("Scroll: zoom  Mid-click: pan", 10, sh - 32, 10, (Color){100,100,120,255});
 
             // Playing indicator
             if (puppetPlaying)
@@ -2757,11 +2925,11 @@ int main(void) {
                     } else if (mode == MODE_BUILD2D) {
                         // No camera changes needed for 2D
                     } else if (mode == MODE_PUPPET) {
-                        // Try loading rig files from known locations
-                        if (puppetRig.partCount == 0) {
-                            // Try fighter rigs
-                            if (LoadPuppetRig("fighter/sprites/ryu/ryu.rig2d", &puppetRig) > 0)
-                                LoadPuppetForEdit("fighter/sprites/ryu/ryu.rig2d");
+                        if (!rigFilesScanned) ScanForRigFiles();
+                        // Auto-load first rig if none loaded
+                        if (puppetRig.partCount == 0 && numRigFiles > 0) {
+                            selectedRigFile = 0;
+                            LoadPuppetForEdit(rigFiles[0]);
                         }
                     } else if (prev == MODE_BUILD || prev == MODE_BUILD2D) {
                         camFocus = (Vector3){ EDITOR_MAP_W * TILE_SZ / 2, 0, EDITOR_MAP_H * TILE_SZ / 2 };
