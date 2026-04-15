@@ -1,0 +1,114 @@
+# Ken punch - front arm extends forward
+loop false
+
+# Windup - pull arm back
+frame 0.06
+  back_shoe -8 -2
+  back_leg -8 -16
+  back_thigh -6 -32
+  front_shoe 8 -2
+  front_leg 8 -16
+  front_thigh 6 -32
+  belt 0 -40
+  torso -2 -54
+  gi_lapel -2 -48
+  gi_fold1 -2 -54
+  gi_fold2 -2 -54
+  back_arm -18 -52
+  back_sleeve -18 -62
+  back_wrap -18 -44
+  back_fist -18 -38
+  front_arm 10 -52
+  front_sleeve 10 -62
+  front_wrap 10 -44
+  front_fist 10 -40
+  neck -1 -66
+  head -1 -80
+  ear -15 -80
+  hair_base -1 -90
+  hair_spike1 -1 -96
+  hair_spike2 -9 -94
+  hair_spike3 7 -94
+  eye_l_white -6 -80
+  eye_l_pupil -5 -80
+  eye_r_white 4 -80
+  eye_r_pupil 5 -80
+  brow_l -6 -84
+  brow_r 4 -84
+  mouth -1 -74
+  hurtbox -16 -96 32 96
+
+# Extend - arm punches forward
+frame 0.08
+  back_shoe -8 -2
+  back_leg -8 -16
+  back_thigh -6 -32
+  front_shoe 8 -2
+  front_leg 8 -16
+  front_thigh 6 -32
+  belt 0 -40
+  torso 2 -54
+  gi_lapel 2 -48
+  gi_fold1 2 -54
+  gi_fold2 2 -54
+  back_arm -18 -52
+  back_sleeve -18 -62
+  back_wrap -18 -44
+  back_fist -18 -38
+  front_arm 30 -48
+  front_sleeve 20 -58
+  front_wrap 36 -48
+  front_fist 42 -48
+  neck 1 -66
+  head 1 -80
+  ear -13 -80
+  hair_base 1 -90
+  hair_spike1 1 -96
+  hair_spike2 -7 -94
+  hair_spike3 9 -94
+  eye_l_white -4 -80
+  eye_l_pupil -3 -80
+  eye_r_white 6 -80
+  eye_r_pupil 7 -80
+  brow_l -4 -84
+  brow_r 6 -84
+  mouth 1 -74
+  hurtbox -16 -96 32 96
+  hitbox 30 -55 24 14
+
+# Recover - return to stance
+frame 0.10
+  back_shoe -8 -2
+  back_leg -8 -16
+  back_thigh -6 -32
+  front_shoe 8 -2
+  front_leg 8 -16
+  front_thigh 6 -32
+  belt 0 -40
+  torso 0 -54
+  gi_lapel 0 -48
+  gi_fold1 0 -54
+  gi_fold2 0 -54
+  back_arm -18 -52
+  back_sleeve -18 -62
+  back_wrap -18 -44
+  back_fist -18 -38
+  front_arm 18 -52
+  front_sleeve 18 -62
+  front_wrap 18 -44
+  front_fist 18 -38
+  neck 0 -66
+  head 0 -80
+  ear -14 -80
+  hair_base 0 -90
+  hair_spike1 0 -96
+  hair_spike2 -8 -94
+  hair_spike3 8 -94
+  eye_l_white -5 -80
+  eye_l_pupil -4 -80
+  eye_r_white 5 -80
+  eye_r_pupil 6 -80
+  brow_l -5 -84
+  brow_r 5 -84
+  mouth 0 -74
+  hurtbox -16 -96 32 96

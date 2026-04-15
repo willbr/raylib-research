@@ -1,0 +1,76 @@
+# Ken hit - lean back, arms flung
+loop false
+
+# Impact
+frame 0.12
+  back_shoe -6 -2
+  back_leg -6 -16
+  back_thigh -4 -32
+  front_shoe 10 -2
+  front_leg 10 -16
+  front_thigh 8 -32
+  belt -4 -40
+  torso -6 -52
+  gi_lapel -6 -46
+  gi_fold1 -6 -52
+  gi_fold2 -6 -52
+  back_arm -24 -48
+  back_sleeve -24 -58
+  back_wrap -24 -40
+  back_fist -26 -34
+  front_arm 8 -48
+  front_sleeve 8 -58
+  front_wrap 8 -40
+  front_fist 6 -34
+  neck -6 -64
+  head -8 -78
+  ear -22 -78
+  hair_base -8 -88
+  hair_spike1 -8 -94
+  hair_spike2 -16 -92
+  hair_spike3 0 -92
+  eye_l_white -13 -78
+  eye_l_pupil -12 -78
+  eye_r_white -3 -78
+  eye_r_pupil -2 -78
+  brow_l -13 -82
+  brow_r -3 -82
+  mouth -8 -72
+  hurtbox -16 -94 36 94
+
+# Recoil
+frame 0.15
+  back_shoe -4 -2
+  back_leg -4 -16
+  back_thigh -2 -32
+  front_shoe 10 -2
+  front_leg 10 -16
+  front_thigh 8 -32
+  belt -2 -40
+  torso -4 -53
+  gi_lapel -4 -47
+  gi_fold1 -4 -53
+  gi_fold2 -4 -53
+  back_arm -22 -50
+  back_sleeve -22 -60
+  back_wrap -22 -42
+  back_fist -24 -36
+  front_arm 10 -50
+  front_sleeve 10 -60
+  front_wrap 10 -42
+  front_fist 8 -36
+  neck -3 -65
+  head -4 -79
+  ear -18 -79
+  hair_base -4 -89
+  hair_spike1 -4 -95
+  hair_spike2 -12 -93
+  hair_spike3 4 -93
+  eye_l_white -9 -79
+  eye_l_pupil -8 -79
+  eye_r_white 1 -79
+  eye_r_pupil 2 -79
+  brow_l -9 -83
+  brow_r 1 -83
+  mouth -4 -73
+  hurtbox -16 -95 36 95

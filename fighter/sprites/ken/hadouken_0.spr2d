@@ -1,0 +1,62 @@
+# Ken hadouken frame 0 - windup, hands cupping energy at hip
+duration 0.12
+hurtbox -16 -88 32 88
+# back shoe planted wide
+rect -18 -6 12 6  70 50 30 255
+ellipse -12 -6 6 3  70 50 30 255
+# front shoe
+rect 6 -6 12 6  70 50 30 255
+ellipse 12 -6 6 3  70 50 30 255
+# back leg braced
+rect -16 -6 11 24  55 55 75 255
+line -11 -2 -11 16  45 45 65 255
+rect -15 18 11 14  55 55 75 255
+# front leg braced
+rect 5 -6 11 24  55 55 75 255
+line 10 -2 10 16  45 45 65 255
+rect 6 18 11 14  55 55 75 255
+# belt
+rect -17 -30 30 5  30 30 30 255
+ellipse 0 -28 4 3  20 20 20 255
+# torso rotated back
+rect -17 -52 30 24  200 45 45 255
+tri -2 -52  -8 -40  4 -40  225 190 150 255
+line -10 -48 -6 -32  180 35 35 255
+line 6 -48 2 -32  180 35 35 255
+# both arms pulled to hip
+rect -26 -40 10 18  225 190 150 255
+line -21 -36 -21 -26  205 172 132 255
+rect -26 -46 10 6  200 45 45 255
+rect -26 -24 10 4  245 245 250 255
+rect -16 -38 10 18  225 190 150 255
+line -11 -34 -11 -24  205 172 132 255
+rect -16 -44 10 6  200 45 45 255
+rect -16 -22 10 4  245 245 250 255
+# cupped hands
+circle -18 -22 5  225 190 150 255
+circle -14 -22 5  225 190 150 255
+# energy glow (orange/red for Ken)
+circle -16 -22 6  255 140 40 140
+circle -16 -22 4  255 200 80 180
+circle -16 -22 2  255 240 160 220
+# neck
+rect -5 -56 8 6  225 190 150 255
+# head
+ellipse -1 -66 11 12  225 190 150 255
+circle -11 -64 3  215 180 140 255
+# hair
+ellipse -1 -76 13 8  230 200 80 255
+tri -8 -78  -13 -84  -3 -88  230 200 80 255
+tri -2 -78  -6 -86  2 -92  230 200 80 255
+tri 4 -78  0 -84  8 -90  230 200 80 255
+tri 9 -78  5 -82  13 -86  230 200 80 255
+# eyes intense
+circle -5 -66 3  255 255 255 255
+circle 5 -66 3  255 255 255 255
+circle -4 -66 2  30 20 10 255
+circle 6 -66 2  30 20 10 255
+# eyebrows
+line -8 -72 -2 -70  100 70 30 255
+line 2 -70 8 -72  100 70 30 255
+# mouth concentrating
+line -2 -60 3 -60  140 80 60 255

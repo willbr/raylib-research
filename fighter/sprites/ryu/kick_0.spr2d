@@ -1,0 +1,61 @@
+# Ryu kick frame 0 - raise leg, knee bent
+duration 0.06
+hurtbox -16 -88 32 88
+# standing shoe (left foot planted)
+rect -14 -6 12 6  70 50 30 255
+ellipse -8 -6 6 3  70 50 30 255
+# standing leg
+rect -13 -6 11 24  55 55 75 255
+line -8 -2 -8 16  45 45 65 255
+rect -12 18 11 14  55 55 75 255
+# kicking leg raised - thigh angled up
+rect 4 10 12 14  55 55 75 255
+# kicking shin bent back
+rect 10 -2 10 14  55 55 75 255
+# kicking foot tucked
+rect 14 -6 10 6  70 50 30 255
+ellipse 19 -6 5 3  70 50 30 255
+# belt
+rect -15 -30 30 5  60 45 25 255
+ellipse 2 -28 4 3  50 38 20 255
+# torso
+rect -15 -52 30 24  235 235 240 255
+tri 0 -52  -6 -40  6 -40  220 185 145 255
+line -8 -48 -4 -32  215 215 220 255
+line 8 -48 4 -32  215 215 220 255
+# back arm guard
+rect -24 -48 10 20  220 185 145 255
+line -19 -44 -19 -34  200 168 128 255
+rect -24 -52 10 6  235 235 240 255
+rect -24 -30 10 4  245 245 250 255
+circle -19 -26 5  220 185 145 255
+# front arm guard
+rect 14 -48 10 20  220 185 145 255
+line 19 -44 19 -34  200 168 128 255
+rect 14 -52 10 6  235 235 240 255
+rect 14 -30 10 4  245 245 250 255
+circle 19 -26 5  220 185 145 255
+# neck
+rect -4 -56 8 6  220 185 145 255
+# head
+ellipse 0 -66 11 12  220 185 145 255
+circle -10 -64 3  210 175 135 255
+# headband
+rect -12 -72 24 4  200 40 40 255
+line -12 -72 -20 -68  200 40 40 255
+line -12 -70 -22 -66  200 40 40 255
+# hair
+ellipse 0 -76 12 7  40 30 20 255
+tri -6 -78  -10 -82  -2 -88  40 30 20 255
+tri 0 -78  -4 -84  4 -90  40 30 20 255
+tri 6 -78  2 -84  10 -86  40 30 20 255
+# eyes
+circle -4 -66 3  255 255 255 255
+circle 6 -66 3  255 255 255 255
+circle -3 -66 2  30 20 10 255
+circle 7 -66 2  30 20 10 255
+# eyebrows
+line -7 -72 -1 -70  40 30 20 255
+line 3 -70 9 -72  40 30 20 255
+# mouth
+line -2 -60 3 -60  160 100 80 255

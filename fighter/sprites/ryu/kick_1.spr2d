@@ -1,0 +1,64 @@
+# Ryu kick frame 1 - leg fully extended, ATTACK FRAME
+duration 0.10
+hurtbox -18 -88 34 88
+hitbox 22 -10 28 14
+# standing shoe (left foot planted)
+rect -16 -6 12 6  70 50 30 255
+ellipse -10 -6 6 3  70 50 30 255
+# standing leg
+rect -15 -6 11 24  55 55 75 255
+line -10 -2 -10 16  45 45 65 255
+rect -14 18 11 14  55 55 75 255
+# kicking leg - thigh horizontal
+rect 2 -14 16 10  55 55 75 255
+# kicking shin extended
+rect 18 -14 16 10  55 55 75 255
+# knee cap
+circle 18 -10 4  50 50 70 255
+# kicking foot extended
+rect 34 -16 14 8  70 50 30 255
+ellipse 44 -12 5 4  70 50 30 255
+# belt
+rect -17 -30 30 5  60 45 25 255
+ellipse 0 -28 4 3  50 38 20 255
+# torso - leaning back for balance
+rect -17 -52 28 24  235 235 240 255
+tri -2 -52  -8 -40  4 -40  220 185 145 255
+line -10 -48 -6 -32  215 215 220 255
+line 6 -48 2 -32  215 215 220 255
+# back arm guard
+rect -26 -48 10 20  220 185 145 255
+line -21 -44 -21 -34  200 168 128 255
+rect -26 -52 10 6  235 235 240 255
+rect -26 -30 10 4  245 245 250 255
+circle -21 -26 5  220 185 145 255
+# front arm guard
+rect 10 -48 10 20  220 185 145 255
+line 15 -44 15 -34  200 168 128 255
+rect 10 -52 10 6  235 235 240 255
+rect 10 -30 10 4  245 245 250 255
+circle 15 -26 5  220 185 145 255
+# neck
+rect -6 -56 8 6  220 185 145 255
+# head - leaning back
+ellipse -2 -66 11 12  220 185 145 255
+circle -12 -64 3  210 175 135 255
+# headband
+rect -14 -72 24 4  200 40 40 255
+line -14 -72 -22 -68  200 40 40 255
+line -14 -70 -24 -66  200 40 40 255
+# hair
+ellipse -2 -76 12 7  40 30 20 255
+tri -8 -78  -12 -82  -4 -88  40 30 20 255
+tri -2 -78  -6 -84  2 -90  40 30 20 255
+tri 4 -78  0 -84  8 -86  40 30 20 255
+# eyes
+circle -6 -66 3  255 255 255 255
+circle 4 -66 3  255 255 255 255
+circle -5 -66 2  30 20 10 255
+circle 5 -66 2  30 20 10 255
+# eyebrows
+line -9 -72 -3 -70  40 30 20 255
+line 1 -70 7 -72  40 30 20 255
+# mouth - kiai
+ellipse 0 -60 3 2  140 60 50 255

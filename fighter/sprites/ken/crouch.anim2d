@@ -1,0 +1,38 @@
+# Ken crouch - squat down, everything shifted ~20px down
+loop false
+
+frame 0.1
+  back_shoe -10 -2
+  back_leg -10 -14
+  back_thigh -8 -22
+  front_shoe 10 -2
+  front_leg 10 -14
+  front_thigh 8 -22
+  belt 0 -28
+  torso 0 -40
+  gi_lapel 0 -34
+  gi_fold1 0 -40
+  gi_fold2 0 -40
+  back_arm -18 -38
+  back_sleeve -18 -46
+  back_wrap -18 -32
+  back_fist -18 -26
+  front_arm 18 -38
+  front_sleeve 18 -46
+  front_wrap 18 -32
+  front_fist 18 -26
+  neck 0 -50
+  head 0 -62
+  ear -14 -62
+  hair_base 0 -72
+  hair_spike1 0 -78
+  hair_spike2 -8 -76
+  hair_spike3 8 -76
+  eye_l_white -5 -62
+  eye_l_pupil -4 -62
+  eye_r_white 5 -62
+  eye_r_pupil 6 -62
+  brow_l -5 -66
+  brow_r 5 -66
+  mouth 0 -56
+  hurtbox -18 -78 36 78

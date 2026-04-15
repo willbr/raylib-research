@@ -1,0 +1,79 @@
+# Ryu idle frame 0 - standing fight stance, slight inhale
+duration 0.15
+hurtbox -16 -88 32 88
+# --- BACK TO FRONT draw order ---
+# back shoe
+rect -14 -6 12 6  70 50 30 255
+ellipse -8 -6 6 3  70 50 30 255
+# back leg (dark pants)
+rect -13 -6 11 24  55 55 75 255
+line -8 -2 -8 16  45 45 65 255
+# back upper leg
+rect -12 18 11 14  55 55 75 255
+# front shoe
+rect 4 -6 12 6  70 50 30 255
+ellipse 10 -6 6 3  70 50 30 255
+# front leg (dark pants)
+rect 3 -6 11 24  55 55 75 255
+line 8 -2 8 16  45 45 65 255
+# front upper leg
+rect 4 18 11 14  55 55 75 255
+# belt knot shadow
+rect -15 -30 30 5  60 45 25 255
+ellipse 2 -28 4 3  50 38 20 255
+# torso (white gi)
+rect -15 -52 30 24  235 235 240 255
+# gi lapel V-neckline (skin showing)
+tri 0 -52  -6 -40  6 -40  220 185 145 255
+# gi fold lines
+line -8 -48 -4 -32  215 215 220 255
+line 8 -48 4 -32  215 215 220 255
+line -10 -38 10 -38  215 215 220 255
+# back arm (skin)
+rect -24 -50 10 22  220 185 145 255
+# back arm muscle line
+line -19 -46 -19 -34  200 168 128 255
+# back gi sleeve
+rect -24 -52 10 6  235 235 240 255
+# back wrist wrap
+rect -24 -30 10 4  245 245 250 255
+# back fist
+circle -19 -26 5  220 185 145 255
+# front arm (skin)
+rect 14 -48 10 22  220 185 145 255
+# front arm muscle line
+line 19 -44 19 -32  200 168 128 255
+# front gi sleeve
+rect 14 -52 10 6  235 235 240 255
+# front wrist wrap
+rect 14 -28 10 4  245 245 250 255
+# front fist
+circle 19 -24 5  220 185 145 255
+# neck
+rect -4 -56 8 6  220 185 145 255
+# head (skin)
+ellipse 0 -66 11 12  220 185 145 255
+# ear
+circle -10 -64 3  210 175 135 255
+# headband (red)
+rect -12 -72 24 4  200 40 40 255
+# headband tail (trailing left)
+line -12 -72 -20 -68  200 40 40 255
+line -12 -70 -22 -66  200 40 40 255
+# hair base (dark brown)
+ellipse 0 -76 12 7  40 30 20 255
+# hair spikes (triangles pointing up)
+tri -6 -78  -10 -82  -2 -88  40 30 20 255
+tri 0 -78  -4 -84  4 -90  40 30 20 255
+tri 6 -78  2 -84  10 -86  40 30 20 255
+# eyes - white
+circle -4 -66 3  255 255 255 255
+circle 6 -66 3  255 255 255 255
+# pupils (looking right)
+circle -3 -66 2  30 20 10 255
+circle 7 -66 2  30 20 10 255
+# eyebrows (angled/determined)
+line -7 -71 -1 -70  40 30 20 255
+line 3 -70 9 -71  40 30 20 255
+# mouth
+line -2 -60 3 -60  160 100 80 255

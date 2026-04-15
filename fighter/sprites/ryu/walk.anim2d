@@ -1,0 +1,80 @@
+# Ryu walk - stepping forward
+loop true
+
+frame 0.12
+  back_shoe -10 -2
+  back_leg -10 -16
+  back_thigh -8 -32
+  front_shoe 14 -2
+  front_leg 12 -16
+  front_thigh 8 -32
+  belt 0 -40
+  torso 0 -54
+  gi_lapel 0 -48
+  gi_fold1 0 -54
+  gi_fold2 0 -54
+  back_arm -16 -50
+  back_sleeve -16 -60
+  back_wrap -16 -42
+  back_fist -16 -36
+  front_arm 16 -54
+  front_sleeve 16 -64
+  front_wrap 16 -46
+  front_fist 16 -40
+  neck 0 -66
+  head 0 -80
+  ear -14 -80
+  headband 0 -88
+  headband_tail1 -16 -82
+  headband_tail2 -20 -76
+  hair_base 0 -92
+  hair_spike1 0 -96
+  hair_spike2 -8 -94
+  hair_spike3 8 -94
+  eye_l_white -5 -80
+  eye_l_pupil -4 -80
+  eye_r_white 5 -80
+  eye_r_pupil 6 -80
+  brow_l -5 -84
+  brow_r 5 -84
+  mouth 0 -74
+  hurtbox -16 -96 32 96
+
+frame 0.12
+  back_shoe 10 -2
+  back_leg 8 -16
+  back_thigh 6 -32
+  front_shoe -6 -2
+  front_leg -4 -16
+  front_thigh -2 -32
+  belt 0 -40
+  torso 0 -54
+  gi_lapel 0 -48
+  gi_fold1 0 -54
+  gi_fold2 0 -54
+  back_arm -16 -54
+  back_sleeve -16 -64
+  back_wrap -16 -46
+  back_fist -16 -40
+  front_arm 16 -50
+  front_sleeve 16 -60
+  front_wrap 16 -42
+  front_fist 16 -36
+  neck 0 -66
+  head 0 -80
+  ear -14 -80
+  headband 0 -88
+  headband_tail1 -16 -82
+  headband_tail2 -20 -76
+  hair_base 0 -92
+  hair_spike1 0 -96
+  hair_spike2 -8 -94
+  hair_spike3 8 -94
+  eye_l_white -5 -80
+  eye_l_pupil -4 -80
+  eye_r_white 5 -80
+  eye_r_pupil 6 -80
+  brow_l -5 -84
+  brow_r 5 -84
+  mouth 0 -74
+  hurtbox -16 -96 32 96

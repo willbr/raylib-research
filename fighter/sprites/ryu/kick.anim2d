@@ -1,0 +1,123 @@
+# Ryu kick - front leg extends forward
+loop false
+
+# Raise leg
+frame 0.06
+  back_shoe -8 -2
+  back_leg -8 -16
+  back_thigh -6 -32
+  front_shoe 10 -16
+  front_leg 8 -26
+  front_thigh 6 -34
+  belt 0 -40
+  torso -2 -54
+  gi_lapel -2 -48
+  gi_fold1 -2 -54
+  gi_fold2 -2 -54
+  back_arm -18 -52
+  back_sleeve -18 -62
+  back_wrap -18 -44
+  back_fist -18 -38
+  front_arm 18 -52
+  front_sleeve 18 -62
+  front_wrap 18 -44
+  front_fist 18 -38
+  neck -1 -66
+  head -1 -80
+  ear -15 -80
+  headband -1 -88
+  headband_tail1 -17 -82
+  headband_tail2 -21 -76
+  hair_base -1 -92
+  hair_spike1 -1 -96
+  hair_spike2 -9 -94
+  hair_spike3 7 -94
+  eye_l_white -6 -80
+  eye_l_pupil -5 -80
+  eye_r_white 4 -80
+  eye_r_pupil 5 -80
+  brow_l -6 -84
+  brow_r 4 -84
+  mouth -1 -74
+  hurtbox -16 -96 32 96
+
+# Extend kick
+frame 0.10
+  back_shoe -10 -2
+  back_leg -10 -16
+  back_thigh -8 -32
+  front_shoe 36 -14
+  front_leg 26 -16
+  front_thigh 12 -30
+  belt 0 -40
+  torso -4 -54
+  gi_lapel -4 -48
+  gi_fold1 -4 -54
+  gi_fold2 -4 -54
+  back_arm -20 -52
+  back_sleeve -20 -62
+  back_wrap -20 -44
+  back_fist -20 -38
+  front_arm 14 -52
+  front_sleeve 14 -62
+  front_wrap 14 -44
+  front_fist 14 -38
+  neck -2 -66
+  head -2 -80
+  ear -16 -80
+  headband -2 -88
+  headband_tail1 -18 -82
+  headband_tail2 -22 -76
+  hair_base -2 -92
+  hair_spike1 -2 -96
+  hair_spike2 -10 -94
+  hair_spike3 6 -94
+  eye_l_white -7 -80
+  eye_l_pupil -6 -80
+  eye_r_white 3 -80
+  eye_r_pupil 4 -80
+  brow_l -7 -84
+  brow_r 3 -84
+  mouth -2 -74
+  hurtbox -18 -96 36 96
+  hitbox 25 -22 28 14
+
+# Recover
+frame 0.10
+  back_shoe -8 -2
+  back_leg -8 -16
+  back_thigh -6 -32
+  front_shoe 8 -2
+  front_leg 8 -16
+  front_thigh 6 -32
+  belt 0 -40
+  torso 0 -54
+  gi_lapel 0 -48
+  gi_fold1 0 -54
+  gi_fold2 0 -54
+  back_arm -18 -52
+  back_sleeve -18 -62
+  back_wrap -18 -44
+  back_fist -18 -38
+  front_arm 18 -52
+  front_sleeve 18 -62
+  front_wrap 18 -44
+  front_fist 18 -38
+  neck 0 -66
+  head 0 -80
+  ear -14 -80
+  headband 0 -88
+  headband_tail1 -16 -82
+  headband_tail2 -20 -76
+  hair_base 0 -92
+  hair_spike1 0 -96
+  hair_spike2 -8 -94
+  hair_spike3 8 -94
+  eye_l_white -5 -80
+  eye_l_pupil -4 -80
+  eye_r_white 5 -80
+  eye_r_pupil 6 -80
+  brow_l -5 -84
+  brow_r 5 -84
+  mouth 0 -74
+  hurtbox -16 -96 32 96

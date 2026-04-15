@@ -1,0 +1,51 @@
+# Ken - Street Fighter puppet rig
+# part name type params... r g b a
+
+# Back leg (behind everything)
+part back_shoe ellipse 0 0 6 3  70 50 30 255
+part back_leg rect 0 0 11 28  55 55 75 255
+part back_thigh rect 0 0 13 24  55 55 75 255
+
+# Front leg
+part front_shoe ellipse 0 0 6 3  70 50 30 255
+part front_leg rect 0 0 11 28  55 55 75 255
+part front_thigh rect 0 0 13 24  55 55 75 255
+
+# Torso area
+part belt rect 0 0 30 5  30 30 30 255
+part torso rect 0 0 28 26  200 45 45 255
+part gi_lapel tri -4 -8 4 -8 0 4  225 190 150 255
+part gi_fold1 line -6 -10 -2 4 1  170 35 35 255
+part gi_fold2 line 6 -10 2 4 1  170 35 35 255
+
+# Back arm
+part back_arm rect 0 0 10 22  225 190 150 255
+part back_sleeve rect 0 0 12 10  200 45 45 255
+part back_wrap rect 0 0 9 6  245 245 250 255
+part back_fist circle 0 0 5  225 190 150 255
+
+# Front arm
+part front_arm rect 0 0 10 22  225 190 150 255
+part front_sleeve rect 0 0 12 10  200 45 45 255
+part front_wrap rect 0 0 9 6  245 245 250 255
+part front_fist circle 0 0 5  225 190 150 255
+
+# Head area
+part neck rect 0 0 8 6  225 190 150 255
+part head ellipse 0 0 14 16  225 190 150 255
+part ear ellipse 0 0 4 5  215 180 140 255
+
+# Hair (blonde, swept back)
+part hair_base ellipse 0 0 16 12  230 200 80 255
+part hair_spike1 tri -4 -6 0 -16 4 -6  230 200 80 255
+part hair_spike2 tri -10 -4 -6 -14 -2 -4  230 200 80 255
+part hair_spike3 tri 2 -4 6 -14 10 -4  230 200 80 255
+
+# Face details
+part eye_l_white ellipse 0 0 3 2  255 255 255 255
+part eye_l_pupil circle 0 0 1  40 30 20 255
+part eye_r_white ellipse 0 0 3 2  255 255 255 255
+part eye_r_pupil circle 0 0 1  40 30 20 255
+part brow_l line -3 0 3 0 2  60 40 20 255
+part brow_r line -3 0 3 0 2  60 40 20 255
+part mouth line -3 0 3 0 2  180 120 100 255
