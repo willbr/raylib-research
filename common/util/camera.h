@@ -4,7 +4,6 @@
 
 #include "raylib.h"
 #include "raymath.h"
-#include "math.h"
 #include <math.h>
 
 typedef struct { Vector3 pos; float yaw, pitch; float fov; } CamFPS;
@@ -14,6 +13,11 @@ typedef struct {
     Vector3 shoulder;   // x = lateral, y = vertical eye-height offset
     float fov;
 } CamThirdPerson;
+// NOTE: CamChase.targetYaw follows the existing vehicle-game convention:
+// targetYaw=0 means the vehicle faces +Z, so the camera lags at -Z behind it.
+// This is the INVERSE of CamFPS.yaw (which uses yaw=0 → -Z). If a game ever
+// shares a single yaw variable across both rigs (e.g. an FPS→vehicle transition),
+// transform with `vehicleYaw = cameraYaw + PI` before passing to CamChaseUpdate.
 typedef struct {
     Vector3 target;
     float targetYaw;
@@ -116,8 +120,10 @@ static inline Camera3D CamChaseToCamera3D(const CamChase *c) {
 }
 
 static inline Camera3D CamTopDownToCamera3D(const CamTopDown *c) {
+    // up=(0,0,-1) keeps the look-down view well-defined without needing an
+    // epsilon offset on the camera position.
     return (Camera3D){
-        .position = (Vector3){ c->target.x, c->target.y + c->height, c->target.z + 0.001f },
+        .position = (Vector3){ c->target.x, c->target.y + c->height, c->target.z },
         .target   = c->target,
         .up       = (Vector3){0, 0, -1},
         .fovy     = c->fov,
