@@ -33,7 +33,59 @@ static int g_fails = 0;
 
 #define NEAR(a, b, eps) (fabsf((a) - (b)) < (eps))
 
-static void test_math(void)   { /* filled in Task 1 */ }
+static void test_math(void) {
+    // SignF
+    CHECK(SignF( 3.0f) ==  1.0f, "SignF positive");
+    CHECK(SignF(-3.0f) == -1.0f, "SignF negative");
+    CHECK(SignF( 0.0f) ==  0.0f, "SignF zero");
+
+    // WrapAnglePi — result must land in (-PI, PI]
+    for (float a = -10.0f; a < 10.0f; a += 0.37f) {
+        float w = WrapAnglePi(a);
+        CHECK(w > -PI - 1e-5f && w <=  PI + 1e-5f, "WrapAnglePi range");
+    }
+    CHECK(NEAR(WrapAnglePi(0.0f), 0.0f, 1e-5f), "WrapAnglePi 0");
+    CHECK(NEAR(WrapAnglePi(TAU), 0.0f, 1e-4f),  "WrapAnglePi 2π");
+
+    // WrapAngle2Pi — result must land in [0, TAU)
+    for (float a = -10.0f; a < 10.0f; a += 0.37f) {
+        float w = WrapAngle2Pi(a);
+        CHECK(w >= 0.0f && w < TAU, "WrapAngle2Pi range");
+    }
+
+    // AngleDiff — shortest signed arc
+    CHECK(NEAR(AngleDiff(0.1f, -0.1f), 0.2f, 1e-5f),   "AngleDiff near 0");
+    CHECK(NEAR(AngleDiff(PI + 0.1f, -PI + 0.1f), 0.0f, 1e-4f), "AngleDiff wrap");
+
+    // ApproachF — moves toward target, does not overshoot
+    CHECK(NEAR(ApproachF(0.0f, 10.0f, 3.0f), 3.0f,  1e-5f), "ApproachF step");
+    CHECK(NEAR(ApproachF(0.0f, 2.0f, 5.0f),  2.0f,  1e-5f), "ApproachF clamp up");
+    CHECK(NEAR(ApproachF(10.0f, 0.0f, 3.0f), 7.0f,  1e-5f), "ApproachF down");
+    CHECK(NEAR(ApproachF(0.0f, -2.0f, 5.0f), -2.0f, 1e-5f), "ApproachF clamp down");
+
+    // SmoothStep endpoints + midpoint
+    CHECK(NEAR(SmoothStep(0.0f, 1.0f, 0.0f), 0.0f, 1e-5f), "SmoothStep 0");
+    CHECK(NEAR(SmoothStep(0.0f, 1.0f, 1.0f), 1.0f, 1e-5f), "SmoothStep 1");
+    CHECK(NEAR(SmoothStep(0.0f, 1.0f, 0.5f), 0.5f, 1e-5f), "SmoothStep mid");
+
+    // EaseOutCubic endpoints
+    CHECK(NEAR(EaseOutCubic(0.0f), 0.0f, 1e-5f), "EaseOutCubic 0");
+    CHECK(NEAR(EaseOutCubic(1.0f), 1.0f, 1e-5f), "EaseOutCubic 1");
+
+    // RandF stays in range
+    SetRandomSeed(12345);
+    for (int i = 0; i < 200; i++) {
+        float r = RandF(5.0f, 10.0f);
+        CHECK(r >= 5.0f && r <= 10.0f, "RandF range");
+    }
+
+    // RandOnUnitSphere magnitude ≈ 1
+    for (int i = 0; i < 20; i++) {
+        Vector3 v = RandOnUnitSphere();
+        float m = sqrtf(v.x*v.x + v.y*v.y + v.z*v.z);
+        CHECK(NEAR(m, 1.0f, 1e-3f), "RandOnUnitSphere magnitude");
+    }
+}
 static void test_pool(void)   { /* filled in Task 2 */ }
 static void test_collide(void){ /* filled in Task 3 */ }
 static void test_camera(void) { /* filled in Task 4 */ }
