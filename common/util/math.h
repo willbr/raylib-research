@@ -11,8 +11,8 @@
 #endif
 
 static inline float WrapAnglePi(float a) {
-    // Reduce modulo 2π first so this remains O(1) for any input; the while
-    // loops then finish in at most one step.
+    // Reduce modulo 2π first so this remains O(1) for any input; the two
+    // if-branches then each fire at most once.
     a = fmodf(a, TAU);
     if (a >   PI) a -= TAU;
     if (a <= -PI) a += TAU;
