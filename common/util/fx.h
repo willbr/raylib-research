@@ -104,6 +104,9 @@ static inline void SpawnParticleBurst2D(Particle2D *particles, int maxParticles,
 }
 
 // Gravity here is a 2D vector (pixels/sec²). (0, 200) is typical downward.
+// Integration order: velocity updated before position (semi-implicit Euler).
+// Note: UpdateParticles3D uses explicit Euler (position first); the asymmetry
+// is historical — the 3D version is preserved verbatim from objects3d.h.
 static inline void UpdateParticles2D(Particle2D *particles, int maxParticles,
                                      float dt, Vector2 gravity) {
     for (int i = 0; i < maxParticles; i++) {
@@ -117,6 +120,8 @@ static inline void UpdateParticles2D(Particle2D *particles, int maxParticles,
     }
 }
 
+// Draws each active particle as an alpha-faded filled circle. Radius holds
+// constant (unlike DrawParticles3D which shrinks the sphere with alpha).
 static inline void DrawParticles2D(Particle2D *particles, int maxParticles) {
     for (int i = 0; i < maxParticles; i++) {
         if (!particles[i].active) continue;
@@ -132,7 +137,7 @@ static inline void DrawParticles2D(Particle2D *particles, int maxParticles) {
 typedef struct {
     float amount;
     float timer;
-    float decay;
+    float decay;   // reserved for future exponential falloff; currently unused (ShakeUpdate decays linearly via timer).
 } ScreenShake;
 
 static inline void ShakeTrigger(ScreenShake *s, float amount) {
