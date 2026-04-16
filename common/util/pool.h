@@ -32,6 +32,7 @@
 
 // Ring-buffer push: marks (arr)[idx_var] active, advances idx_var modulo N.
 // Use for decals / tracers / oldest-overwrite particle sources.
+// Precondition: N >= 1.
 //
 // Usage:  int decalIdx = 0; ... POOL_RING_PUSH(decals, MAX_DECALS, decalIdx);
 #define POOL_RING_PUSH(arr, N, idx_var) do { \

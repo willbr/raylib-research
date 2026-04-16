@@ -161,6 +161,22 @@ static void test_pool(void) {
     POOL_RING_PUSH(ring, 3, ri); CHECK(ri == 0 && ring[2].active, "RING push 2 wraps");
     ring[0].active = false; // simulate previous decal fading
     POOL_RING_PUSH(ring, 3, ri); CHECK(ri == 1 && ring[0].active, "RING push reactivate");
+
+    // POOL_FOREACH + break: exit early at first inactive slot
+    Item scan[4] = { {10, true}, {20, true}, {0, false}, {40, true} };
+    int firstInactive = -1;
+    POOL_FOREACH(scan, 4, s) {
+        if (!s->active) { firstInactive = (int)(s - scan); break; }
+    }
+    CHECK(firstInactive == 2, "POOL_FOREACH break lands on first inactive");
+
+    // POOL_FOREACH + continue: skip inactive while summing active payloads
+    int sum = 0;
+    POOL_FOREACH(scan, 4, s) {
+        if (!s->active) continue;
+        sum += s->payload;
+    }
+    CHECK(sum == 70, "POOL_FOREACH continue skips inactive");
 }
 static void test_collide(void){ /* filled in Task 3 */ }
 static void test_camera(void) { /* filled in Task 4 */ }
