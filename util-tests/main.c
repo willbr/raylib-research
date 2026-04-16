@@ -72,6 +72,25 @@ static void test_math(void) {
     CHECK(NEAR(EaseOutCubic(0.0f), 0.0f, 1e-5f), "EaseOutCubic 0");
     CHECK(NEAR(EaseOutCubic(1.0f), 1.0f, 1e-5f), "EaseOutCubic 1");
 
+    // Non-endpoint cases that discriminate correct formulas from accidents
+    CHECK(NEAR(EaseOutCubic(0.5f),   0.875f,  1e-5f), "EaseOutCubic 0.5 = 0.875");
+    CHECK(NEAR(EaseInOutCubic(0.5f), 0.5f,    1e-5f), "EaseInOutCubic 0.5 = 0.5");
+    CHECK(NEAR(EaseInOutCubic(0.25f),0.0625f, 1e-5f), "EaseInOutCubic 0.25 = 0.0625");
+    CHECK(NEAR(SmoothStep(0.0f, 1.0f, 0.25f), 0.15625f, 1e-5f), "SmoothStep 0.25 = 0.15625");
+
+    // AngleLerp — shortest-arc interpolation
+    CHECK(NEAR(AngleLerp(0.0f, PI / 2.0f, 0.5f), PI / 4.0f, 1e-5f),
+          "AngleLerp 0 → π/2 midpoint");
+    // Cross the antimeridian: from near +π to near -π, midpoint lands on ±π
+    {
+        float al = AngleLerp(PI - 0.1f, -PI + 0.1f, 0.5f);
+        CHECK(NEAR(al, PI, 0.01f) || NEAR(al, -PI, 0.01f),
+              "AngleLerp wraps through antimeridian");
+    }
+
+    // WrapAnglePi boundary: -π falls outside (-π, π], wraps to +π
+    CHECK(NEAR(WrapAnglePi(-PI), PI, 1e-4f), "WrapAnglePi -π → +π");
+
     // RandF stays in range
     SetRandomSeed(12345);
     for (int i = 0; i < 200; i++) {
@@ -84,6 +103,20 @@ static void test_math(void) {
         Vector3 v = RandOnUnitSphere();
         float m = sqrtf(v.x*v.x + v.y*v.y + v.z*v.z);
         CHECK(NEAR(m, 1.0f, 1e-3f), "RandOnUnitSphere magnitude");
+    }
+
+    // RandOnUnitCircle magnitude ≈ 1
+    for (int i = 0; i < 20; i++) {
+        Vector2 v2 = RandOnUnitCircle();
+        float m = sqrtf(v2.x * v2.x + v2.y * v2.y);
+        CHECK(NEAR(m, 1.0f, 1e-4f), "RandOnUnitCircle magnitude");
+    }
+
+    // RandInUnitSphere: every sample lies within or on the unit sphere
+    for (int i = 0; i < 40; i++) {
+        Vector3 v = RandInUnitSphere();
+        float m = sqrtf(v.x * v.x + v.y * v.y + v.z * v.z);
+        CHECK(m <= 1.0f + 1e-4f, "RandInUnitSphere within unit sphere");
     }
 }
 static void test_pool(void)   { /* filled in Task 2 */ }

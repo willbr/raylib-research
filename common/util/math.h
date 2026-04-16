@@ -11,9 +11,11 @@
 #endif
 
 static inline float WrapAnglePi(float a) {
-    // Fast-path for typical values; fall back to fmod for large inputs.
-    while (a >   PI) a -= TAU;
-    while (a <= -PI) a += TAU;
+    // Reduce modulo 2π first so this remains O(1) for any input; the while
+    // loops then finish in at most one step.
+    a = fmodf(a, TAU);
+    if (a >   PI) a -= TAU;
+    if (a <= -PI) a += TAU;
     return a;
 }
 
@@ -73,7 +75,9 @@ static inline Vector2 RandOnUnitCircle(void) {
 }
 
 static inline Vector3 RandOnUnitSphere(void) {
-    // Marsaglia 1972
+    // Cylindrical-projection sampling (Archimedes hat-box theorem): uniform
+    // in z and θ is uniform on the sphere because areas on latitude bands
+    // are proportional to Δz. Rejection-free, O(1).
     float z = RandF(-1.0f, 1.0f);
     float t = RandF(0.0f, TAU);
     float r = sqrtf(1.0f - z * z);
