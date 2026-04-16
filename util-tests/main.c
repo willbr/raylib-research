@@ -267,7 +267,35 @@ static void test_camera(void) {
     c = CamThirdPersonToCamera3D(&tp);
     CHECK(c.position.z > tp.dist * 0.9f,     "CamThirdPerson behind target +Z");
 }
-static void test_fx(void)     { /* filled in Task 5 */ }
+static void test_fx(void) {
+    // 3D particle pool spawn / update / decay
+    Particle3D p3[16] = {0};
+    SetRandomSeed(42);
+    SpawnParticleBurst(p3, 16, (Vector3){0, 0, 0}, 8, 1.0f, 2.0f, 0.5f, 0.5f, 0.1f, 0.1f);
+    CHECK(POOL_COUNT_ACTIVE(p3, 16) == 8, "SpawnParticleBurst spawns count");
+
+    for (int s = 0; s < 60; s++) UpdateParticles3D(p3, 16, 1.0f / 30.0f, 10.0f);
+    // After 2s of gravity, all particles with life ≤ 0.5s are dead
+    CHECK(POOL_COUNT_ACTIVE(p3, 16) == 0, "UpdateParticles3D decays to zero");
+
+    // 2D particle pool
+    Particle2D p2[16] = {0};
+    SpawnParticleBurst2D(p2, 16, (Vector2){0, 0}, RED, 6,
+                         10.0f, 20.0f, 0.5f, 0.5f, 2.0f, 4.0f);
+    CHECK(POOL_COUNT_ACTIVE(p2, 16) == 6, "SpawnParticleBurst2D spawns");
+    for (int s = 0; s < 60; s++) UpdateParticles2D(p2, 16, 1.0f / 30.0f, (Vector2){0, 200.0f});
+    CHECK(POOL_COUNT_ACTIVE(p2, 16) == 0, "UpdateParticles2D decays");
+
+    // ScreenShake
+    ScreenShake sh = {0};
+    ShakeTrigger(&sh, 0.5f);
+    CHECK(sh.timer > 0.0f, "ShakeTrigger sets timer");
+    for (int s = 0; s < 60; s++) ShakeUpdate(&sh, 0.02f);
+    CHECK(sh.timer == 0.0f, "ShakeUpdate decays to zero");
+    // Offset with no time left returns zero
+    Vector2 off = ShakeOffset(&sh);
+    CHECK(off.x == 0.0f && off.y == 0.0f, "ShakeOffset zero when done");
+}
 
 int main(void) {
     test_math();
