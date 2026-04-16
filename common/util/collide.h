@@ -9,6 +9,7 @@
 
 typedef struct { Vector3 center, half;   } AABB;
 typedef struct { Vector3 center; float radius; } Sphere;
+// Capsule: type is available; no helper functions yet (reserved for future use).
 typedef struct { Vector3 a, b;  float radius; } Capsule;
 
 static inline bool AABBOverlap(AABB a, AABB b) {
@@ -31,6 +32,7 @@ static inline bool SphereOverlap(Sphere a, Sphere b) {
     return d2 < r * r;
 }
 
+// Distance from a point to the nearest surface of an AABB. Returns 0 when inside.
 static inline float PointToAABBDist(Vector3 p, AABB a) {
     float qx = Clamp(p.x, a.center.x - a.half.x, a.center.x + a.half.x);
     float qy = Clamp(p.y, a.center.y - a.half.y, a.center.y + a.half.y);
@@ -40,6 +42,8 @@ static inline float PointToAABBDist(Vector3 p, AABB a) {
 }
 
 // Integrate gravity, clamp to floorY, set grounded. Pass grounded=NULL if unused.
+//
+// Usage:  GroundSnap(&player.pos, &player.velY, dt, 25.0f, 0.0f, &player.grounded);
 static inline void GroundSnap(Vector3 *pos, float *velY, float dt, float gravity,
                               float floorY, bool *grounded) {
     *velY -= gravity * dt;
@@ -57,9 +61,11 @@ static inline void GroundSnap(Vector3 *pos, float *velY, float dt, float gravity
 typedef bool (*UtilBlockedFn)(Vector3 pos, float radius, void *user);
 
 // Try to move by `delta` (only X and Z consumed), sliding along walls.
-// Per-axis separate resolve, matching fps/3rd-person. `radius` is the player's
-// horizontal cylinder radius. Y is not touched — use GroundSnap for that.
-// Steps in increments of `radius` so thick deltas never tunnel through thin walls.
+// Per-axis separate resolve (fps/3rd-person style), with `radius`-sized sub-steps
+// so large deltas never tunnel through thin walls. Y is not touched — use
+// GroundSnap for that.
+//
+// Usage:  SlideXZ(&player.pos, moveVec, 0.4f, MyBlockedFn, &myCtx);
 static inline void SlideXZ(Vector3 *pos, Vector3 delta, float radius,
                            UtilBlockedFn blocked, void *user) {
     // X axis

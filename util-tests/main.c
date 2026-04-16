@@ -180,9 +180,10 @@ static void test_pool(void) {
 }
 // File-scope context for test_blocked (lifted from nested function — Clang/c99
 // does not support GNU nested functions).
-static struct { AABB wall; } s_collide_ctx;
+typedef struct { AABB wall; } CollideTestCtx;
+static CollideTestCtx s_collide_ctx;
 static bool test_blocked(Vector3 p, float r, void *u) {
-    AABB w = ((struct { AABB wall; } *)u)->wall;
+    AABB w = ((CollideTestCtx *)u)->wall;
     return fabsf(p.x - w.center.x) < (w.half.x + r)
         && fabsf(p.z - w.center.z) < (w.half.z + r)
         && fabsf(p.y - w.center.y) < (w.half.y + r);
@@ -225,7 +226,7 @@ static void test_collide(void) {
     s_collide_ctx.wall = wall;
     Vector3 pp = {0, 0, 0};
     SlideXZ(&pp, (Vector3){5.0f, 0, 0}, 0.4f, test_blocked, &s_collide_ctx);
-    CHECK(pp.x < 1.5f,                 "SlideXZ blocked on X");
+    CHECK(pp.x > 0.0f && pp.x < 1.5f,  "SlideXZ advances then blocks on X");
     pp = (Vector3){0, 0, 0};
     SlideXZ(&pp, (Vector3){0, 0, 5.0f}, 0.4f, test_blocked, &s_collide_ctx);
     CHECK(NEAR(pp.z, 5.0f, 1e-5f),     "SlideXZ free on Z");
