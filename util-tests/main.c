@@ -3,10 +3,11 @@
 // Exits non-zero if any assertion fails.
 //
 // No InitWindow: the tests only touch pure-logic (math/pool/collide/camera/fx).
-// raylib's RNG (GetRandomValue, SetRandomSeed) works without a window on the
-// platforms this project targets. Headers for input/hud/debug are included
-// for compile-check only; their functions require an active window and are
-// validated at runtime during the fps migration (Task 10), not here.
+// raylib's RNG (GetRandomValue, SetRandomSeed) operates on private static
+// state in rprand.h and does not touch CORE.Window, so it is safe to call
+// before InitWindow. Headers for input/hud/debug are included for compile-
+// check only; their functions require an active window and are validated
+// at runtime during the fps migration (Task 10), not here.
 
 #include <stdio.h>
 #include <math.h>
