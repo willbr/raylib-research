@@ -178,7 +178,58 @@ static void test_pool(void) {
     }
     CHECK(sum == 70, "POOL_FOREACH continue skips inactive");
 }
-static void test_collide(void){ /* filled in Task 3 */ }
+// File-scope context for test_blocked (lifted from nested function — Clang/c99
+// does not support GNU nested functions).
+static struct { AABB wall; } s_collide_ctx;
+static bool test_blocked(Vector3 p, float r, void *u) {
+    AABB w = ((struct { AABB wall; } *)u)->wall;
+    return fabsf(p.x - w.center.x) < (w.half.x + r)
+        && fabsf(p.z - w.center.z) < (w.half.z + r)
+        && fabsf(p.y - w.center.y) < (w.half.y + r);
+}
+
+static void test_collide(void) {
+    AABB a = { .center = {0, 0, 0}, .half = {1, 1, 1} };
+    AABB b = { .center = {1.5f, 0, 0}, .half = {1, 1, 1} };   // overlaps on X
+    AABB c = { .center = {3.0f, 0, 0}, .half = {1, 1, 1} };   // touches edge
+    AABB d = { .center = {4.0f, 0, 0}, .half = {1, 1, 1} };   // clearly separate
+
+    CHECK(AABBOverlap(a, b),  "AABB overlap true");
+    CHECK(!AABBOverlap(a, c), "AABB edge exclusive");
+    CHECK(!AABBOverlap(a, d), "AABB separated");
+
+    Sphere s1 = { .center = {1.5f, 0, 0}, .radius = 1.0f };
+    Sphere s2 = { .center = {5.0f, 0, 0}, .radius = 0.5f };
+    CHECK(AABBvsSphere(a, s1),  "AABBvsSphere hit");
+    CHECK(!AABBvsSphere(a, s2), "AABBvsSphere miss");
+
+    Sphere q1 = { .center = {0, 0, 0}, .radius = 1.0f };
+    Sphere q2 = { .center = {1.5f, 0, 0}, .radius = 1.0f };
+    Sphere q3 = { .center = {3.0f, 0, 0}, .radius = 1.0f };
+    CHECK(SphereOverlap(q1, q2), "Sphere overlap");
+    CHECK(!SphereOverlap(q1, q3), "Sphere miss");
+
+    // GroundSnap — falls, lands on floor, grounded flips true
+    Vector3 pos = {0, 5.0f, 0};
+    float velY = 0.0f;
+    bool grounded = false;
+    for (int step = 0; step < 120; step++) {
+        GroundSnap(&pos, &velY, 1.0f/60.0f, 20.0f, 0.0f, &grounded);
+    }
+    CHECK(NEAR(pos.y, 0.0f, 1e-4f), "GroundSnap lands on floor");
+    CHECK(velY == 0.0f,              "GroundSnap zeroes velY on floor");
+    CHECK(grounded,                  "GroundSnap flips grounded true");
+
+    // SlideXZ — wall at x=1.5 blocks X movement but allows Z movement.
+    AABB wall = { .center = {2.0f, 0, 0}, .half = {0.5f, 1, 0.5f} };
+    s_collide_ctx.wall = wall;
+    Vector3 pp = {0, 0, 0};
+    SlideXZ(&pp, (Vector3){5.0f, 0, 0}, 0.4f, test_blocked, &s_collide_ctx);
+    CHECK(pp.x < 1.5f,                 "SlideXZ blocked on X");
+    pp = (Vector3){0, 0, 0};
+    SlideXZ(&pp, (Vector3){0, 0, 5.0f}, 0.4f, test_blocked, &s_collide_ctx);
+    CHECK(NEAR(pp.z, 5.0f, 1e-5f),     "SlideXZ free on Z");
+}
 static void test_camera(void) { /* filled in Task 4 */ }
 static void test_fx(void)     { /* filled in Task 5 */ }
 
