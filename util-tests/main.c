@@ -119,7 +119,49 @@ static void test_math(void) {
         CHECK(m <= 1.0f + 1e-4f, "RandInUnitSphere within unit sphere");
     }
 }
-static void test_pool(void)   { /* filled in Task 2 */ }
+static void test_pool(void) {
+    typedef struct { int payload; bool active; } Item;
+
+    enum { N = 4 };
+    Item pool[N] = {0};
+
+    // Fresh pool: spawn returns 0..N-1 then -1
+    int i0 = POOL_SPAWN(pool, N); CHECK(i0 == 0, "POOL_SPAWN 0");
+    int i1 = POOL_SPAWN(pool, N); CHECK(i1 == 1, "POOL_SPAWN 1");
+    int i2 = POOL_SPAWN(pool, N); CHECK(i2 == 2, "POOL_SPAWN 2");
+    int i3 = POOL_SPAWN(pool, N); CHECK(i3 == 3, "POOL_SPAWN 3");
+    int i4 = POOL_SPAWN(pool, N); CHECK(i4 == -1, "POOL_SPAWN full");
+
+    // Each slot is active, with distinct indices
+    CHECK(pool[0].active && pool[3].active, "POOL_SPAWN sets active");
+
+    // Free one, next spawn reuses it
+    pool[1].active = false;
+    int i5 = POOL_SPAWN(pool, N); CHECK(i5 == 1, "POOL_SPAWN reuses freed");
+
+    // POOL_FOREACH — iterates all N; count with filter
+    int total = 0, active = 0;
+    POOL_FOREACH(pool, N, p) {
+        total++;
+        if (p->active) active++;
+    }
+    CHECK(total == N,      "POOL_FOREACH total");
+    CHECK(active == N,     "POOL_FOREACH active");
+
+    // POOL_COUNT_ACTIVE
+    CHECK(POOL_COUNT_ACTIVE(pool, N) == N, "POOL_COUNT_ACTIVE full");
+    pool[2].active = false;
+    CHECK(POOL_COUNT_ACTIVE(pool, N) == N - 1, "POOL_COUNT_ACTIVE after free");
+
+    // POOL_RING_PUSH — wraps and overwrites
+    Item ring[3] = {0};
+    int ri = 0;
+    POOL_RING_PUSH(ring, 3, ri); CHECK(ri == 1 && ring[0].active, "RING push 0");
+    POOL_RING_PUSH(ring, 3, ri); CHECK(ri == 2 && ring[1].active, "RING push 1");
+    POOL_RING_PUSH(ring, 3, ri); CHECK(ri == 0 && ring[2].active, "RING push 2 wraps");
+    ring[0].active = false; // simulate previous decal fading
+    POOL_RING_PUSH(ring, 3, ri); CHECK(ri == 1 && ring[0].active, "RING push reactivate");
+}
 static void test_collide(void){ /* filled in Task 3 */ }
 static void test_camera(void) { /* filled in Task 4 */ }
 static void test_fx(void)     { /* filled in Task 5 */ }
