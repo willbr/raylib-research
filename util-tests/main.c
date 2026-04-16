@@ -231,7 +231,42 @@ static void test_collide(void) {
     SlideXZ(&pp, (Vector3){0, 0, 5.0f}, 0.4f, test_blocked, &s_collide_ctx);
     CHECK(NEAR(pp.z, 5.0f, 1e-5f),     "SlideXZ free on Z");
 }
-static void test_camera(void) { /* filled in Task 4 */ }
+static void test_camera(void) {
+    // CamFPS: yaw=0 → forward is -Z. yaw=PI/2 → forward is +X.
+    CamFPS fps = CamFPSInit((Vector3){0, 1, 0});
+    fps.yaw = 0.0f; fps.pitch = 0.0f;
+    Camera3D c = CamFPSToCamera3D(&fps);
+    CHECK(NEAR(c.target.x - c.position.x, 0.0f, 1e-4f), "CamFPS yaw=0 target x");
+    CHECK(c.target.z - c.position.z < -0.9f,           "CamFPS yaw=0 target -Z");
+
+    fps.yaw = PI / 2.0f;
+    c = CamFPSToCamera3D(&fps);
+    CHECK(c.target.x - c.position.x > 0.9f,            "CamFPS yaw=π/2 target +X");
+
+    // CamChase: after many updates, _pos converges to behind target at height
+    CamChase chase = CamChaseInit((Vector3){0, 0, 0}, 0.0f);
+    chase.lagSpeed = 20.0f;  // fast convergence for the test
+    for (int step = 0; step < 200; step++) {
+        CamChaseUpdate(&chase, (Vector3){0, 0, 0}, 0.0f, 1.0f / 60.0f);
+    }
+    CHECK(chase._pos.z < -chase.dist * 0.9f,           "CamChase behind target");
+    CHECK(NEAR(chase._pos.y, chase.height, 0.01f),     "CamChase at height");
+
+    // CamTopDown: camera above target, target equal
+    CamTopDown td = CamTopDownInit((Vector3){3, 0, 4});
+    CamTopDownUpdate(&td, (Vector3){3, 0, 4});
+    c = CamTopDownToCamera3D(&td);
+    CHECK(c.position.y > 1.0f,              "CamTopDown camera above");
+    CHECK(NEAR(c.target.x, 3.0f, 1e-4f),    "CamTopDown target x");
+    CHECK(NEAR(c.target.z, 4.0f, 1e-4f),    "CamTopDown target z");
+
+    // CamThirdPerson: target equals what we passed; position at dist behind
+    CamThirdPerson tp = CamThirdPersonInit((Vector3){0, 1, 0});
+    tp.yaw = 0.0f; tp.pitch = 0.0f; tp.shoulder = (Vector3){0, 0.5f, 0};
+    CamThirdPersonUpdate(&tp, (Vector3){0, 1, 0}, 1.0f / 60.0f);
+    c = CamThirdPersonToCamera3D(&tp);
+    CHECK(c.position.z > tp.dist * 0.9f,     "CamThirdPerson behind target +Z");
+}
 static void test_fx(void)     { /* filled in Task 5 */ }
 
 int main(void) {
