@@ -740,8 +740,12 @@ int main(void) {
 moveCar:;
             // Bicycle model: rear-wheel drive, front-wheel steering
             // No turning without speed — wheels must be rolling
-            float wheelbase = 2.5f;
-            float maxSteerAngle = 0.2f * surfTurnMult;  // max front wheel angle (radians)
+            // Bicycle geometry: turn radius = wheelbase / tan(steerAngle).
+            // With wheelbase=3.0 and maxSteerAngle=0.13 on tarmac, radius is
+            // ~23 units — a proper rally car's turning circle. Drift (1.6×)
+            // and loose-surface mult (1.4×–1.8×) tighten it meaningfully.
+            float wheelbase = 3.0f;
+            float maxSteerAngle = 0.13f * surfTurnMult;
             float steerAngle = steer / CAR_TURN * maxSteerAngle;  // normalize steer input
             if (car->speed < 0) steerAngle = -steerAngle;
 
