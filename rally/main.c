@@ -269,8 +269,8 @@ SurfaceType GetSurface(Vector3 pos) {
 
 void SpawnDust(Vector3 pos, Color col) {
     Dust *d = &dust[dustIdx];
-    d->pos = pos;
-    d->pos.y = 0.1f;
+    d->pos = pos;  // caller is responsible for Y; with track height variation,
+                   // spawning at a fixed y buried the dust under the road.
     d->vel = (Vector3){
         (float)GetRandomValue(-20, 20) / 10.0f,
         (float)GetRandomValue(5, 20) / 10.0f,
