@@ -1,7 +1,6 @@
 #include "raylib.h"
 #include "raymath.h"
 #include "../common/objects3d.h"
-#include "../common/util/vehicle.h"
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -439,37 +438,36 @@ int main(void) {
                 if (fabsf(angleDiff) > 0.6f) accel *= 0.5f;
             }
 
-            // Physics: accel/drag/clamp/move via VehicleUpdate; bicycle steering stays inline.
+            // Physics
+            car->speed += accel * dt;
+            car->speed *= drag;
+            car->speed = Clamp(car->speed, -10.0f, maxSpd);
             car->steerInput = steer;
 
 moveCar:;
-            // Bicycle model: rear-wheel drive, front-wheel steering.
-            // Compute rotation change from bicycle geometry first, then let
-            // VehicleUpdate handle accel/drag/clamp/XZ movement.
-            // steer=0 in VehicleInput prevents VehicleUpdate adding a second rotation.
+            // Bicycle model: rear-wheel drive, front-wheel steering
+            // No turning without speed — wheels must be rolling
             float wheelbase = 2.5f;
             float maxSteerAngle = 0.2f * surfTurnMult;  // max front wheel angle (radians)
             float steerAngle = steer / CAR_TURN * maxSteerAngle;  // normalize steer input
             if (car->speed < 0) steerAngle = -steerAngle;
 
+            float cs = cosf(car->rotation), sn = sinf(car->rotation);
+
             if (fabsf(car->speed) > 0.5f) {
+                // Rear axle drives forward in body direction
+                // Front axle follows at a steered angle
+                // Car turns because the front pulls the heading
+
+                // Turn rate from bicycle geometry: angular_vel = speed * tan(steerAngle) / wheelbase
                 float angularVel = car->speed * tanf(steerAngle) / wheelbase;
                 car->rotation += angularVel * dt;
+
+                // Move the whole car forward in its (now updated) facing direction
+                float newCs = cosf(car->rotation), newSn = sinf(car->rotation);
+                car->pos.x += newSn * car->speed * dt;
+                car->pos.z += newCs * car->speed * dt;
             }
-
-            // Build Vehicle from Car state and run accel/drag/clamp/move.
-            // Normalise `accel` (continuous, includes AI rubber-band + corner
-            // multipliers) back to a −1..1 throttle. Player inputs degenerate
-            // to ±1; AI inputs preserve their fractional magnitude.
-            float throttle = Clamp(accel / CAR_ACCEL, -1.0f, 1.0f);
-            Vehicle vh = { .pos = car->pos, .rotation = car->rotation, .speed = car->speed,
-                           .accel = CAR_ACCEL, .brake = CAR_BRAKE, .maxSpeed = maxSpd,
-                           .reverseMax = 10.0f, .turnRate = 0.0f, .drag = drag };
-            VehicleUpdate(&vh, (VehicleInput){ .throttle = throttle, .steer = 0.0f }, dt);
-            car->pos   = vh.pos;
-            car->speed = vh.speed;
-            // car->rotation was already written by the bicycle block above.
-
             car->pos.y = 0.2f;
 
             // Track boundary: use local segment search for smooth push
@@ -548,8 +546,8 @@ moveCar:;
             Car *p = &cars[0];
             float cs = cosf(p->rotation), sn = sinf(p->rotation);
             float speedPct = Clamp(fabsf(p->speed) / CAR_MAX_SPEED, 0, 1.2f);
-            float camDist = 7.0f - speedPct * 1.5f;
-            float camH = 3.5f - speedPct * 0.5f;
+            float camDist = 4.5f - speedPct * 1.0f;
+            float camH = 2.2f - speedPct * 0.3f;
             Vector3 camPos = {
                 p->pos.x - sn * camDist,
                 p->pos.y + camH,
@@ -560,8 +558,10 @@ moveCar:;
                 p->pos.y + 0.5f,
                 p->pos.z + cs * 4.0f
             };
-            camera.position = Vector3Lerp(camera.position, camPos, 5.0f * dt);
-            camera.target = Vector3Lerp(camera.target, camTarget, 7.0f * dt);
+            // Tight follow: at 144fps a 5.0*dt lerp left ~8 units of
+            // positional lag at top speed, making the car look tiny.
+            camera.position = Vector3Lerp(camera.position, camPos,    20.0f * dt);
+            camera.target   = Vector3Lerp(camera.target,   camTarget, 20.0f * dt);
 
             float targetFov = 55.0f + speedPct * 15.0f;
             camera.fovy += (targetFov - camera.fovy) * 4.0f * dt;
