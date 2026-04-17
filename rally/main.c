@@ -15,7 +15,8 @@
 
 // Car physics
 #define CAR_ACCEL      35.0f
-#define CAR_BRAKE      40.0f
+#define CAR_BRAKE      40.0f   // S/Down full brake — scrubs quickly and can cross 0 into reverse
+#define CAR_HANDBRAKE  18.0f   // Space handbrake — gentler, clamps at 0 (no reverse)
 #define CAR_MAX_SPEED  45.0f
 #define CAR_TURN        2.8f
 #define CAR_DRAG_ROAD   0.992f
@@ -535,16 +536,20 @@ int main(void) {
 
             if (!raceStarted) goto moveCar;
 
+            bool handbraking = false;
             if (car->isPlayer) {
                 if (IsKeyDown(KEY_UP) || IsKeyDown(KEY_W))    accel = CAR_ACCEL;
                 if (IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_S))  accel = -CAR_BRAKE;
                 if (IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A))  steer = CAR_TURN;
                 if (IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D)) steer = -CAR_TURN;
 
-                // Space = brake + handbrake drift combined.
-                bool driftInput = IsKeyDown(KEY_SPACE);
-                if (driftInput) accel = -CAR_BRAKE;
-                if (driftInput && fabsf(steer) > 0.1f && car->speed > 15.0f) {
+                // Space = handbrake + drift. Gentler than full brake and
+                // can't push the car into reverse.
+                if (IsKeyDown(KEY_SPACE)) {
+                    handbraking = true;
+                    accel = -CAR_HANDBRAKE;
+                }
+                if (handbraking && fabsf(steer) > 0.1f && car->speed > 15.0f) {
                     car->drifting = true;
                     car->driftTime += dt;
                     steer *= CAR_DRIFT_MULT;
@@ -581,7 +586,11 @@ int main(void) {
             if (car->airborne) { accel = 0; steer = 0; drag = 1.0f; }
 
             // Physics
+            float prevSpeedSgn = car->speed;
             car->speed += accel * dt;
+            // Handbrake brings the car to rest but never past it —
+            // reverse requires pressing S / Down.
+            if (handbraking && prevSpeedSgn > 0.0f && car->speed < 0.0f) car->speed = 0.0f;
             car->speed *= drag;
             car->speed = Clamp(car->speed, -10.0f, maxSpd);
             car->steerInput = steer;
