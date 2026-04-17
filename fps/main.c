@@ -25,6 +25,7 @@ typedef struct {
     float yaw, pitch;
     float velY;
     bool grounded;
+    bool noclip;         // free-fly debug mode: no collision, no gravity
     float hp, maxHp;
     float armor;
     int ammo, maxAmmo;
@@ -421,24 +422,46 @@ int main(void) {
             // --- Mouse look ---
             InputLookMouse(&player.yaw, &player.pitch, 0.002f, 1.55f);
 
-            // --- Movement ---
-            float speed = 10.0f * dt;
-            Vector3 move = Vector3Scale(InputMoveDir3Flat(player.yaw), speed);
+            // --- Noclip toggle ---
+            if (IsKeyPressed(KEY_V)) player.noclip = !player.noclip;
 
-            // Try move with wall collision
-            SlideXZ(&player.pos, move, 0.4f, FpsBlocked, NULL);
-
-            // Clamp to arena
-            float hs = MAP_SIZE/2 - 0.5f;
-            player.pos.x = Clamp(player.pos.x, -hs, hs);
-            player.pos.z = Clamp(player.pos.z, -hs, hs);
-
-            // Jump
-            if (IsKeyPressed(KEY_SPACE) && player.grounded) {
-                player.velY = 8.0f;
+            if (player.noclip) {
+                // Free-fly: WASD along full 3D forward (honours pitch), Space/LCtrl for up/down
+                float cy = cosf(player.yaw), sy = sinf(player.yaw);
+                float cp = cosf(player.pitch), sp = sinf(player.pitch);
+                Vector3 fwd3 = (Vector3){ sy * cp, sp, -cy * cp };
+                Vector3 rgt  = (Vector3){ cy,       0,  sy      };
+                Vector2 in = InputMoveDir2();
+                Vector3 ncMove = {
+                    fwd3.x * -in.y + rgt.x * in.x,
+                    fwd3.y * -in.y,
+                    fwd3.z * -in.y + rgt.z * in.x,
+                };
+                if (IsKeyDown(KEY_SPACE))        ncMove.y += 1.0f;
+                if (IsKeyDown(KEY_LEFT_CONTROL)) ncMove.y -= 1.0f;
+                player.pos = Vector3Add(player.pos, Vector3Scale(ncMove, 25.0f * dt));
+                player.velY = 0.0f;
                 player.grounded = false;
+            } else {
+                // --- Movement ---
+                float speed = 10.0f * dt;
+                Vector3 move = Vector3Scale(InputMoveDir3Flat(player.yaw), speed);
+
+                // Try move with wall collision
+                SlideXZ(&player.pos, move, 0.4f, FpsBlocked, NULL);
+
+                // Clamp to arena
+                float hs = MAP_SIZE/2 - 0.5f;
+                player.pos.x = Clamp(player.pos.x, -hs, hs);
+                player.pos.z = Clamp(player.pos.z, -hs, hs);
+
+                // Jump
+                if (IsKeyPressed(KEY_SPACE) && player.grounded) {
+                    player.velY = 8.0f;
+                    player.grounded = false;
+                }
+                GroundSnap(&player.pos, &player.velY, dt, 20.0f, 0.0f, &player.grounded);
             }
-            GroundSnap(&player.pos, &player.velY, dt, 20.0f, 0.0f, &player.grounded);
 
             // --- Weapon switch ---
             if (IsKeyPressed(KEY_ONE)) { player.weapon = 0; player.ammo = weapons[0].maxAmmo; player.reloading = false; }
@@ -852,6 +875,13 @@ int main(void) {
 
         // Damage flash
         HudDamageVignette(player.damageFlash * (400.0f / 255.0f), (Color){200, 30, 30, 255});
+
+        // Noclip indicator
+        if (player.noclip) {
+            const char *nc = "NOCLIP";
+            int nw = MeasureText(nc, 24);
+            DrawText(nc, (sw - nw) / 2, 10, 24, RED);
+        }
 
         // Game over
         if (gameOver) {
