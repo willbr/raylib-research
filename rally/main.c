@@ -8,7 +8,9 @@
 // Sega Rally style: winding track with surface types, AI, dust effects
 
 #define TRACK_SEGS    64
-#define TRACK_WIDTH   10.0f
+#define TRACK_WIDTH   14.0f
+#define BANK_WIDTH     6.0f  // horizontal reach of the grassy bank beyond each edge
+#define BANK_HEIGHT    1.8f  // vertical rise of the bank at its outer lip
 #define NUM_CARS       4
 #define TOTAL_LAPS     3
 #define MAX_DUST      80
@@ -328,6 +330,25 @@ void DrawTrack(void) {
         DrawTriangle3D(inner0, inner1, outer0, roadCol);
         DrawTriangle3D(outer0, inner1, outer1, roadCol);
 
+        // Grassy banks either side — slant up from the road edge outward.
+        Color bankCol = (Color){95, 135, 70, 255};
+        Vector3 bankL0 = Vector3Add(inner0, Vector3Scale(n0, -BANK_WIDTH));
+        Vector3 bankL1 = Vector3Add(inner1, Vector3Scale(n1, -BANK_WIDTH));
+        Vector3 bankR0 = Vector3Add(outer0, Vector3Scale(n0,  BANK_WIDTH));
+        Vector3 bankR1 = Vector3Add(outer1, Vector3Scale(n1,  BANK_WIDTH));
+        bankL0.y += BANK_HEIGHT; bankL1.y += BANK_HEIGHT;
+        bankR0.y += BANK_HEIGHT; bankR1.y += BANK_HEIGHT;
+        // Left bank (both windings)
+        DrawTriangle3D(inner0, bankL0, inner1, bankCol);
+        DrawTriangle3D(bankL0, bankL1, inner1, bankCol);
+        DrawTriangle3D(inner0, inner1, bankL0, bankCol);
+        DrawTriangle3D(bankL0, inner1, bankL1, bankCol);
+        // Right bank (both windings)
+        DrawTriangle3D(outer0, outer1, bankR0, bankCol);
+        DrawTriangle3D(bankR0, outer1, bankR1, bankCol);
+        DrawTriangle3D(outer0, bankR0, outer1, bankCol);
+        DrawTriangle3D(bankR0, bankR1, outer1, bankCol);
+
         // Edge lines
         if (i % 2 == 0) {
             Color edgeCol = (Color){220, 220, 220, 255};
@@ -476,7 +497,7 @@ int main(void) {
     Car cars[NUM_CARS] = {0};
     Color carColors[] = { {200,40,40,255}, {40,40,200,255}, {40,180,40,255}, {220,200,40,255} };
     for (int i = 0; i < NUM_CARS; i++) {
-        float offset = (float)(i - NUM_CARS/2) * 2.5f;
+        float offset = ((float)i - (NUM_CARS - 1) * 0.5f) * 3.0f;
         cars[i].pos = Vector3Add(trackPts[0], Vector3Scale(trackNormals[0], offset));
         cars[i].pos.y = trackPts[0].y + 0.2f;
         cars[i].rotation = atan2f(trackDirs[0].x, trackDirs[0].z);
@@ -826,7 +847,11 @@ moveCar:;
 
         // --- Draw ---
         BeginDrawing();
-        ClearBackground((Color){130, 170, 210, 255});
+        // Sky gradient — deeper blue high, warmer band near horizon.
+        ClearBackground((Color){75, 120, 180, 255});
+        DrawRectangleGradientV(0, 0, sw, sh,
+            (Color){ 60, 110, 185, 255},   // top
+            (Color){200, 205, 195, 255});  // horizon
 
         BeginMode3D(camera);
             // Ground beneath track
