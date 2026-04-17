@@ -936,13 +936,13 @@ int main(void) {
                 while (angleDiff > PI)  angleDiff -= 2*PI;
                 while (angleDiff < -PI) angleDiff += 2*PI;
                 steer = Clamp(angleDiff * 3.0f, -CAR_TURN, CAR_TURN);
-                accel = CAR_ACCEL * 0.88f;
+                accel = CAR_ACCEL * 1.00f;  // was 0.88 — AI now matches player throttle
 
-                // Rubber banding
+                // Rubber banding: closer catch-up, softer ease-off.
                 float playerProg = CarProgress(&cars[0]);
                 float myProg = CarProgress(car);
-                if (myProg > playerProg + 5) accel *= 0.65f;
-                else if (myProg < playerProg - 5) accel *= 1.15f;
+                if (myProg > playerProg + 5) accel *= 0.80f;
+                else if (myProg < playerProg - 5) accel *= 1.25f;
 
                 // Brake for sharp corners
                 if (fabsf(angleDiff) > 0.6f) accel *= 0.5f;
