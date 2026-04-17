@@ -558,9 +558,12 @@ void DrawCheckpoint(int seg, int idx) {
     Color post = (idx == cpNextIdx) ? (Color){255, 160, 50, 255} : (Color){200, 200, 200, 255};
     DrawCylinderEx(L, (Vector3){L.x, L.y + postH, L.z}, 0.18f, 0.14f, 8, post);
     DrawCylinderEx(R, (Vector3){R.x, R.y + postH, R.z}, 0.18f, 0.14f, 8, post);
-    // Banner spanning the top.
+    // Banner spanning the top. DrawCubeRotY uses RotateY (CCW from above),
+    // so the angle that maps the cube's +X onto L→R is atan2(Δz, Δx) —
+    // NOT rally's physics-yaw atan2(Δx, Δz) which would mis-orient the
+    // banner by up to 90°.
     float spanW = Vector3Distance(L, R);
-    float banRot = atan2f(R.x - L.x, R.z - L.z);
+    float banRot = atan2f(R.z - L.z, R.x - L.x);
     Vector3 banCenter = { (L.x + R.x) * 0.5f, L.y + postH - 0.45f, (L.z + R.z) * 0.5f };
     Color ban = (idx == cpNextIdx) ? (Color){255, 120, 40, 255} : (Color){80, 80, 110, 255};
     DrawCubeRotY(banCenter, spanW, 0.85f, 0.2f, banRot, ban);
