@@ -18,6 +18,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include "util/fx.h"
 
 // --- Types ---
 
@@ -144,97 +145,6 @@ static inline void DrawObject3DRotated(Part *parts, int count, Vector3 pos,
                                        float pitch, float yaw, float roll) {
     for (int i = 0; i < count; i++)
         DrawPartRotated3D(&parts[i], pos, pitch, yaw, roll);
-}
-
-// --- Particle system ---
-// Generic 3D particle with position, velocity, lifetime, color, size.
-
-typedef struct {
-    Vector3 pos;
-    Vector3 vel;
-    float life, maxLife;
-    float size;
-    Color color;
-    bool active;
-} Particle3D;
-
-// Spawn a burst of particles at a position (explosion, splash, etc.)
-// Colors cycle through: fire orange, fire yellow, gray smoke.
-static inline void SpawnParticleBurst(Particle3D *particles, int maxParticles,
-                                      Vector3 pos, int count, float speedMin, float speedMax,
-                                      float lifeMin, float lifeMax, float sizeMin, float sizeMax) {
-    for (int i = 0; i < maxParticles && count > 0; i++) {
-        if (particles[i].active) continue;
-        float a1 = (float)GetRandomValue(0, 628) / 100.0f;
-        float a2 = (float)GetRandomValue(-314, 314) / 200.0f;
-        float spd = speedMin + (float)GetRandomValue(0, 100) / 100.0f * (speedMax - speedMin);
-        particles[i].pos = pos;
-        particles[i].vel = (Vector3){
-            cosf(a1) * cosf(a2) * spd,
-            fabsf(sinf(a2)) * spd + 2.0f,
-            sinf(a1) * cosf(a2) * spd
-        };
-        int roll = GetRandomValue(0, 2);
-        if (roll == 0) particles[i].color = (Color){255, 200, 50, 255};
-        else if (roll == 1) particles[i].color = (Color){255, 100, 0, 255};
-        else particles[i].color = (Color){80, 80, 80, 200};
-        particles[i].life = lifeMin + (float)GetRandomValue(0, 100) / 100.0f * (lifeMax - lifeMin);
-        particles[i].maxLife = particles[i].life;
-        particles[i].size = sizeMin + (float)GetRandomValue(0, 100) / 100.0f * (sizeMax - sizeMin);
-        particles[i].active = true;
-        count--;
-    }
-}
-
-// Update all particles (gravity + decay)
-static inline void UpdateParticles3D(Particle3D *particles, int maxParticles, float dt, float gravity) {
-    for (int i = 0; i < maxParticles; i++) {
-        if (!particles[i].active) continue;
-        particles[i].pos = Vector3Add(particles[i].pos, Vector3Scale(particles[i].vel, dt));
-        particles[i].vel.y -= gravity * dt;
-        particles[i].life -= dt;
-        if (particles[i].life <= 0) particles[i].active = false;
-    }
-}
-
-// Draw all particles as spheres with fading alpha
-static inline void DrawParticles3D(Particle3D *particles, int maxParticles) {
-    for (int i = 0; i < maxParticles; i++) {
-        if (!particles[i].active) continue;
-        float alpha = particles[i].life / particles[i].maxLife;
-        Color c = particles[i].color;
-        c.a = (unsigned char)(alpha * c.a);
-        DrawSphere(particles[i].pos, particles[i].size * alpha, c);
-    }
-}
-
-// --- Screen shake ---
-
-typedef struct {
-    float amount;
-    float timer;
-    float decay;
-} ScreenShake;
-
-static inline void ShakeTrigger(ScreenShake *s, float amount) {
-    s->amount = amount;
-    s->timer = amount;
-}
-
-static inline void ShakeUpdate(ScreenShake *s, float dt) {
-    if (s->timer > 0) {
-        s->timer -= dt;
-        if (s->timer < 0) s->timer = 0;
-    }
-}
-
-static inline Vector2 ShakeOffset(ScreenShake *s) {
-    if (s->timer <= 0) return (Vector2){0, 0};
-    float intensity = s->timer / s->amount;
-    return (Vector2){
-        (float)GetRandomValue(-100, 100) / 100.0f * s->amount * intensity,
-        (float)GetRandomValue(-100, 100) / 100.0f * s->amount * intensity
-    };
 }
 
 // Draw a rotated cube using 12 triangles (6 faces)
