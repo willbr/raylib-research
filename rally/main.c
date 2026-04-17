@@ -561,6 +561,10 @@ int main(void) {
                 if (fabsf(angleDiff) > 0.6f) accel *= 0.5f;
             }
 
+            // No throttle / steering / drag while airborne — the car
+            // coasts along its launch velocity until it lands.
+            if (car->airborne) { accel = 0; steer = 0; drag = 1.0f; }
+
             // Physics
             car->speed += accel * dt;
             car->speed *= drag;
@@ -578,13 +582,12 @@ moveCar:;
             float cs = cosf(car->rotation), sn = sinf(car->rotation);
 
             if (fabsf(car->speed) > 0.5f) {
-                // Rear axle drives forward in body direction
-                // Front axle follows at a steered angle
-                // Car turns because the front pulls the heading
-
-                // Turn rate from bicycle geometry: angular_vel = speed * tan(steerAngle) / wheelbase
-                float angularVel = car->speed * tanf(steerAngle) / wheelbase;
-                car->rotation += angularVel * dt;
+                // Rotation only updates while the wheels are on the road —
+                // in the air the car holds its heading.
+                if (!car->airborne) {
+                    float angularVel = car->speed * tanf(steerAngle) / wheelbase;
+                    car->rotation += angularVel * dt;
+                }
 
                 // Move the whole car forward in its (now updated) facing direction
                 float newCs = cosf(car->rotation), newSn = sinf(car->rotation);
