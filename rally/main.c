@@ -1337,16 +1337,19 @@ moveCar:;
             }
         }
 
-        // Car-car collision
-        for (int i = 0; i < NUM_CARS; i++) {
-            for (int j = i + 1; j < NUM_CARS; j++) {
-                Vector3 diff = Vector3Subtract(cars[i].pos, cars[j].pos);
-                diff.y = 0;
-                float dist = Vector3Length(diff);
-                if (dist < 2.0f && dist > 0.01f) {
-                    Vector3 push = Vector3Scale(Vector3Normalize(diff), (2.0f - dist) * 0.5f);
-                    cars[i].pos = Vector3Add(cars[i].pos, push);
-                    cars[j].pos = Vector3Subtract(cars[j].pos, push);
+        // Car-car collision — skip during replay so it doesn't fight
+        // with the ring-buffer positions we just wrote.
+        if (!replayActive) {
+            for (int i = 0; i < NUM_CARS; i++) {
+                for (int j = i + 1; j < NUM_CARS; j++) {
+                    Vector3 diff = Vector3Subtract(cars[i].pos, cars[j].pos);
+                    diff.y = 0;
+                    float dist = Vector3Length(diff);
+                    if (dist < 2.0f && dist > 0.01f) {
+                        Vector3 push = Vector3Scale(Vector3Normalize(diff), (2.0f - dist) * 0.5f);
+                        cars[i].pos = Vector3Add(cars[i].pos, push);
+                        cars[j].pos = Vector3Subtract(cars[j].pos, push);
+                    }
                 }
             }
         }
