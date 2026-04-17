@@ -713,6 +713,9 @@ static void ArcTextMono(const char *t, int x, int y, int size, Color col) {
     }
 }
 
+static int NUM_CARS_RENDER = 4;  // populated from compile-time NUM_CARS
+static void DrawScene3D(Car *cars_arr, float rTimer);
+
 void DrawCar(Car *car, int colorIdx) {
     // Copy parts and tint body color
     Part tinted[sizeof(carBody)/sizeof(Part)];
@@ -769,11 +772,63 @@ void DrawCar(Car *car, int colorIdx) {
 
 }
 
+static void DrawScene3D(Car *cars_arr, float rTimer) {
+    DrawPlane((Vector3){0, -0.02f, 0}, (Vector2){500, 500}, (Color){60, 100, 40, 255});
+    DrawTrack();
+
+    // Skid marks
+    for (int i = 0; i < MAX_SKIDS; i++) {
+        if (!skids[i].active) continue;
+        Vector3 a = skids[i].a, b = skids[i].b;
+        Vector3 dir = Vector3Subtract(b, a);
+        dir.y = 0;
+        float len = sqrtf(dir.x * dir.x + dir.z * dir.z);
+        if (len < 0.001f) continue;
+        Vector3 perp = { -dir.z / len * 0.12f, 0, dir.x / len * 0.12f };
+        Vector3 p1 = Vector3Subtract(a, perp);
+        Vector3 p2 = Vector3Add(a, perp);
+        Vector3 p3 = Vector3Add(b, perp);
+        Vector3 p4 = Vector3Subtract(b, perp);
+        Color sc = (Color){ 20, 20, 20, 200 };
+        DrawTriangle3D(p1, p2, p3, sc);
+        DrawTriangle3D(p1, p3, p4, sc);
+        DrawTriangle3D(p1, p3, p2, sc);
+        DrawTriangle3D(p1, p4, p3, sc);
+    }
+
+    for (int i = 0; i < numBuildings; i++) DrawBuilding(&buildings[i]);
+    for (int i = 0; i < numProps; i++) DrawProp(&props[i]);
+    for (int i = 0; i < numFans; i++) DrawFan(&fans[i], rTimer);
+    for (int i = 0; i < NUM_CHECKPOINTS; i++) DrawCheckpoint(CHECKPOINT_SEGS[i], i);
+    for (int i = 0; i < numPuddles; i++) {
+        Vector3 a = puddles[i].pos;
+        Vector3 b = (Vector3){ a.x, a.y + 0.005f, a.z };
+        DrawCylinderEx(a, b, puddles[i].radius, puddles[i].radius, 14,
+                       (Color){40, 90, 140, 200});
+        DrawCylinderWiresEx(a, b, puddles[i].radius, puddles[i].radius, 14,
+                            (Color){80, 140, 190, 200});
+    }
+    for (int i = 0; i < numTrees; i++) DrawTree(treePosns[i], treeSizes[i]);
+    for (int i = 0; i < MAX_DUST; i++) {
+        if (!dust[i].active) continue;
+        float alpha = dust[i].life / 0.6f;
+        Color dc = dust[i].color;
+        dc.a = (unsigned char)(alpha * dc.a);
+        DrawSphere(dust[i].pos, 0.1f + (1.0f - alpha) * 0.2f, dc);
+    }
+    for (int ci = 0; ci < NUM_CARS_RENDER; ci++) DrawCar(&cars_arr[ci], ci);
+}
+
 int main(void) {
     InitWindow(800, 600, "Rally Racing");
     SetTargetFPS(144);
     SetWindowState(FLAG_WINDOW_RESIZABLE);
     MaximizeWindow();
+
+    // Rear-view mirror render texture.
+    RenderTexture2D mirrorRT = LoadRenderTexture(512, 144);
+    SetTextureFilter(mirrorRT.texture, TEXTURE_FILTER_BILINEAR);
+    NUM_CARS_RENDER = NUM_CARS;
 
     GenerateTrack();
 
@@ -1253,6 +1308,27 @@ moveCar:;
             camera.fovy += (targetFov - camera.fovy) * 4.0f * dt;
         }
 
+        // --- Rear-view mirror pass: render from a camera facing backwards
+        //     from the driver's eye into the mirrorRT, for a 2D blit later.
+        Camera3D mirrorCam = {0};
+        {
+            Car *p = &cars[0];
+            float fx = sinf(p->rotation), fz = cosf(p->rotation);
+            mirrorCam.position   = (Vector3){ p->pos.x, p->pos.y + 1.2f, p->pos.z };
+            mirrorCam.target     = (Vector3){ p->pos.x - fx * 12.0f,
+                                              p->pos.y + 0.6f,
+                                              p->pos.z - fz * 12.0f };
+            mirrorCam.up         = (Vector3){ 0, 1, 0 };
+            mirrorCam.fovy       = 60.0f;
+            mirrorCam.projection = CAMERA_PERSPECTIVE;
+        }
+        BeginTextureMode(mirrorRT);
+            ClearBackground((Color){75, 120, 180, 255});
+            BeginMode3D(mirrorCam);
+                DrawScene3D(cars, raceTimer);
+            EndMode3D();
+        EndTextureMode();
+
         // --- Draw ---
         BeginDrawing();
         // Sky gradient — deeper blue high, warmer band near horizon.
@@ -1262,68 +1338,7 @@ moveCar:;
             (Color){200, 205, 195, 255});  // horizon
 
         BeginMode3D(camera);
-            // Ground beneath track
-            DrawPlane((Vector3){0, -0.02f, 0}, (Vector2){500, 500}, (Color){60, 100, 40, 255});
-
-            DrawTrack();
-
-            // Skid marks (on the road, below cars/particles so they read as decals)
-            for (int i = 0; i < MAX_SKIDS; i++) {
-                if (!skids[i].active) continue;
-                Vector3 a = skids[i].a, b = skids[i].b;
-                Vector3 dir = Vector3Subtract(b, a);
-                dir.y = 0;
-                float len = sqrtf(dir.x * dir.x + dir.z * dir.z);
-                if (len < 0.001f) continue;
-                Vector3 perp = { -dir.z / len * 0.12f, 0, dir.x / len * 0.12f };
-                Vector3 p1 = Vector3Subtract(a, perp);
-                Vector3 p2 = Vector3Add(a, perp);
-                Vector3 p3 = Vector3Add(b, perp);
-                Vector3 p4 = Vector3Subtract(b, perp);
-                Color sc = (Color){ 20, 20, 20, 200 };
-                DrawTriangle3D(p1, p2, p3, sc);
-                DrawTriangle3D(p1, p3, p4, sc);
-                DrawTriangle3D(p1, p3, p2, sc);
-                DrawTriangle3D(p1, p4, p3, sc);
-            }
-
-            // Buildings
-            for (int i = 0; i < numBuildings; i++) DrawBuilding(&buildings[i]);
-
-            // Crashable props (fences + crates)
-            for (int i = 0; i < numProps; i++) DrawProp(&props[i]);
-
-            // Cheering fans — bob in time with raceTimer
-            for (int i = 0; i < numFans; i++) DrawFan(&fans[i], raceTimer);
-
-            // Checkpoint gates
-            for (int i = 0; i < NUM_CHECKPOINTS; i++) DrawCheckpoint(CHECKPOINT_SEGS[i], i);
-
-            // Puddles (flat blue discs flush with the road)
-            for (int i = 0; i < numPuddles; i++) {
-                Vector3 a = puddles[i].pos;
-                Vector3 b = (Vector3){ a.x, a.y + 0.005f, a.z };
-                DrawCylinderEx(a, b, puddles[i].radius, puddles[i].radius, 14,
-                               (Color){40, 90, 140, 200});
-                DrawCylinderWiresEx(a, b, puddles[i].radius, puddles[i].radius, 14,
-                                    (Color){80, 140, 190, 200});
-            }
-
-            // Trees
-            for (int i = 0; i < numTrees; i++) DrawTree(treePosns[i], treeSizes[i]);
-
-            // Dust particles
-            for (int i = 0; i < MAX_DUST; i++) {
-                if (!dust[i].active) continue;
-                float alpha = dust[i].life / 0.6f;
-                Color dc = dust[i].color;
-                dc.a = (unsigned char)(alpha * dc.a);
-                DrawSphere(dust[i].pos, 0.1f + (1.0f - alpha) * 0.2f, dc);
-            }
-
-            // Cars (sort by distance from camera for rough depth)
-            for (int ci = 0; ci < NUM_CARS; ci++) DrawCar(&cars[ci], ci);
-
+            DrawScene3D(cars, raceTimer);
         EndMode3D();
 
         // --- HUD ---
@@ -1502,6 +1517,26 @@ moveCar:;
             int fpsNumW = ArcMonoWidth(fpsTxt, 22);
             ArcTextMono(fpsTxt, 20, 15, 22, GREEN);
             ArcText(" FPS", 20 + fpsNumW, 15, 22, GREEN);
+        }
+
+        // Rear-view mirror (top-centre) — flip X for the mirror illusion
+        // and negate Y to compensate for RenderTexture's upside-down Y.
+        {
+            float mw = 400.0f, mh = 112.0f;
+            float mx = (float)(sw / 2) - mw * 0.5f;
+            float my = 8.0f;
+            // Chrome frame
+            DrawRectangle((int)(mx - 4), (int)(my - 4),
+                          (int)(mw + 8), (int)(mh + 8), (Color){30, 30, 30, 220});
+            DrawRectangleLinesEx((Rectangle){mx - 4, my - 4, mw + 8, mh + 8}, 2.0f,
+                                 (Color){200, 200, 220, 255});
+            Rectangle src = {
+                (float)mirrorRT.texture.width, 0,
+                -(float)mirrorRT.texture.width,
+                -(float)mirrorRT.texture.height
+            };
+            Rectangle dst = { mx, my, mw, mh };
+            DrawTexturePro(mirrorRT.texture, src, dst, (Vector2){0, 0}, 0.0f, WHITE);
         }
         EndDrawing();
     }
