@@ -297,7 +297,82 @@ static void test_fx(void) {
     Vector2 off = ShakeOffset(&sh);
     CHECK(off.x == 0.0f && off.y == 0.0f, "ShakeOffset zero when done");
 }
-static void test_vehicle(void){/* filled in Task 2 */ }
+static void test_vehicle(void) {
+    // A standard vehicle config used by most subtests.
+    Vehicle v = {
+        .pos = {0, 0, 0}, .rotation = 0.0f, .speed = 0.0f,
+        .accel = 35.0f, .brake = 40.0f,
+        .maxSpeed = 45.0f, .reverseMax = 15.0f,
+        .turnRate = 2.8f, .drag = 0.99f,
+    };
+    VehicleInput fwd      = { .throttle =  1.0f, .steer = 0.0f };
+    VehicleInput rev      = { .throttle = -1.0f, .steer = 0.0f };
+    VehicleInput coast    = { .throttle =  0.0f, .steer = 0.0f };
+    VehicleInput rightOn  = { .throttle =  0.0f, .steer = 1.0f };
+
+    // Accelerates from rest, but has not hit maxSpeed after 1 simulated second.
+    for (int i = 0; i < 60; i++) VehicleUpdate(&v, fwd, 1.0f / 60.0f);
+    CHECK(v.speed > 0.0f,          "Vehicle accelerates from rest");
+    CHECK(v.speed < v.maxSpeed,    "Vehicle below maxSpeed after 1s of throttle");
+
+    // After another 5 simulated seconds, speed approaches maxSpeed.
+    for (int i = 0; i < 300; i++) VehicleUpdate(&v, fwd, 1.0f / 60.0f);
+    CHECK(v.speed > v.maxSpeed * 0.95f, "Vehicle approaches maxSpeed after 6s");
+    CHECK(v.speed <= v.maxSpeed + 1e-3f, "Vehicle respects maxSpeed clamp");
+
+    // Drag alone decays speed.
+    v.speed = v.maxSpeed;
+    for (int i = 0; i < 180; i++) VehicleUpdate(&v, coast, 1.0f / 60.0f);
+    CHECK(v.speed < v.maxSpeed * 0.6f, "Drag decays speed over 3s");
+
+    // Negative throttle reverses and clamps at reverseMax.
+    v.speed = 0.0f;
+    for (int i = 0; i < 300; i++) VehicleUpdate(&v, rev, 1.0f / 60.0f);
+    CHECK(v.speed < 0.0f,                "Negative throttle reverses from rest");
+    CHECK(v.speed >= -v.reverseMax - 1e-3f, "Reverse respects reverseMax clamp");
+
+    // Forward motion at rotation = 0 moves +Z, not X.
+    Vehicle w = {
+        .pos = {0, 7.5f, 0}, .rotation = 0.0f, .speed = 10.0f,
+        .accel = 35.0f, .brake = 40.0f,
+        .maxSpeed = 45.0f, .reverseMax = 15.0f,
+        .turnRate = 2.8f, .drag = 1.0f,  // disable drag for clean pos test
+    };
+    VehicleUpdate(&w, coast, 1.0f / 60.0f);
+    CHECK(w.pos.z > 0.0f,            "rotation=0 advances +Z");
+    CHECK(NEAR(w.pos.x, 0.0f, 1e-5f), "rotation=0 leaves X unchanged");
+    CHECK(NEAR(w.pos.y, 7.5f, 1e-5f), "VehicleUpdate never touches pos.y");
+
+    // Forward motion at rotation = π/2 moves +X, not Z.
+    w.pos = (Vector3){0, 0, 0};
+    w.rotation = PI / 2.0f;
+    VehicleUpdate(&w, coast, 1.0f / 60.0f);
+    CHECK(w.pos.x > 0.0f,             "rotation=π/2 advances +X");
+    CHECK(NEAR(w.pos.z, 0.0f, 1e-4f), "rotation=π/2 leaves Z unchanged");
+
+    // Steering at zero speed still has effect (turnFactor floor 0.3).
+    Vehicle u = {
+        .pos = {0, 0, 0}, .rotation = 0.0f, .speed = 0.0f,
+        .accel = 35.0f, .brake = 40.0f,
+        .maxSpeed = 45.0f, .reverseMax = 15.0f,
+        .turnRate = 2.0f, .drag = 0.99f,
+    };
+    VehicleUpdate(&u, rightOn, 1.0f / 60.0f);
+    float rotAtZero = u.rotation;
+    CHECK(rotAtZero > 0.0f, "Steering rotates even at zero speed (turnFactor floor)");
+
+    // Steering at maxSpeed rotates more than at zero (turnFactor ramps up).
+    u.rotation = 0.0f;
+    u.speed = u.maxSpeed;
+    VehicleUpdate(&u, rightOn, 1.0f / 60.0f);
+    CHECK(u.rotation > rotAtZero * 2.0f, "Steering at maxSpeed rotates more than at zero");
+
+    // Y is still untouched after a batch of updates.
+    u.pos = (Vector3){0, 3.14f, 0};
+    VehicleInput full = { .throttle = 1.0f, .steer = 0.5f };
+    for (int i = 0; i < 60; i++) VehicleUpdate(&u, full, 1.0f / 60.0f);
+    CHECK(NEAR(u.pos.y, 3.14f, 1e-5f), "pos.y still untouched after mixed input");
+}
 
 int main(void) {
     test_math();
