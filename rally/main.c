@@ -543,13 +543,13 @@ int main(void) {
                 if (IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A))  steer = CAR_TURN;
                 if (IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D)) steer = -CAR_TURN;
 
-                // Space = handbrake + drift. Gentler than full brake and
-                // can't push the car into reverse.
-                if (IsKeyDown(KEY_SPACE)) {
-                    handbraking = true;
-                    accel = -CAR_HANDBRAKE;
-                }
-                if (handbraking && fabsf(steer) > 0.1f && car->speed > 15.0f) {
+                // Space held: either drift (when turning at speed) or
+                // straight-line handbrake (when not).
+                bool spaceHeld = IsKeyDown(KEY_SPACE);
+                if (spaceHeld && fabsf(steer) > 0.1f && car->speed > 15.0f) {
+                    // DRIFT: skid through the corner. W/S accel stays active
+                    // so the player can throttle through the slide; drift
+                    // drag + boosted turn do the work without bleeding speed.
                     car->drifting = true;
                     car->driftTime += dt;
                     steer *= CAR_DRIFT_MULT;
@@ -557,6 +557,7 @@ int main(void) {
                 } else {
                     car->drifting = false;
                     car->driftTime = 0;
+                    if (spaceHeld) handbraking = true;  // straight-line handbrake
                 }
             } else {
                 // AI
