@@ -357,7 +357,11 @@ void DrawTrack(void) {
         Vector3 b = Vector3Lerp(left, right, t1);
         Vector3 fwd = Vector3Scale(trackDirs[0], 1.5f);
         Vector3 a2 = Vector3Add(a, fwd), b2 = Vector3Add(b, fwd);
-        a.y = b.y = a2.y = b2.y = 0.03f;
+        // Sit on the road surface at seg 0 (+ small offset so z-fighting
+        // doesn't strobe it), not at absolute y=0.03 — the track no longer
+        // lives at ground level.
+        float y = trackPts[0].y + 0.03f;
+        a.y = b.y = a2.y = b2.y = y;
         Color chk = (c % 2 == 0) ? WHITE : BLACK;
         DrawTriangle3D(a, b, b2, chk);
         DrawTriangle3D(a, b2, a2, chk);
