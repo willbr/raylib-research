@@ -825,8 +825,9 @@ int main(void) {
     SetWindowState(FLAG_WINDOW_RESIZABLE);
     MaximizeWindow();
 
-    // Rear-view mirror render texture.
-    RenderTexture2D mirrorRT = LoadRenderTexture(512, 144);
+    // Rear-view mirror render texture. Wider aspect (~4.3:1) so the
+    // mirror shows a lot of road behind and reads at a glance.
+    RenderTexture2D mirrorRT = LoadRenderTexture(860, 200);
     SetTextureFilter(mirrorRT.texture, TEXTURE_FILTER_BILINEAR);
     NUM_CARS_RENDER = NUM_CARS;
 
@@ -1319,7 +1320,7 @@ moveCar:;
                                               p->pos.y + 0.6f,
                                               p->pos.z - fz * 12.0f };
             mirrorCam.up         = (Vector3){ 0, 1, 0 };
-            mirrorCam.fovy       = 60.0f;
+            mirrorCam.fovy       = 70.0f;  // wider vertical FOV pairs with wide mirror
             mirrorCam.projection = CAMERA_PERSPECTIVE;
         }
         BeginTextureMode(mirrorRT);
@@ -1522,7 +1523,7 @@ moveCar:;
         // Rear-view mirror (top-centre) — flip X for the mirror illusion
         // and negate Y to compensate for RenderTexture's upside-down Y.
         {
-            float mw = 400.0f, mh = 112.0f;
+            float mw = 720.0f, mh = 170.0f;
             float mx = (float)(sw / 2) - mw * 0.5f;
             float my = 8.0f;
             // Chrome frame
