@@ -529,38 +529,45 @@ void DrawBuilding(const Building *b) {
     Vector3 wallCenter = { b->pos.x, b->pos.y + b->size.y * 0.5f, b->pos.z };
     DrawCubeRotY(wallCenter, b->size.x, b->size.y, b->size.z, b->rotY, b->wall);
 
-    // Pitched roof: a prism made from a front/back triangle + two slanted
-    // quads. Ridge runs along the local X axis for a consistent look.
+    // Pitched roof:
+    //   ridge runs along the local X axis between R0 (x=-hx) and R1 (+hx);
+    //   two sloping quads cover the -Z and +Z halves of the footprint;
+    //   two triangular gables close the ends at x=±hx.
     float hx = b->size.x * 0.5f;
     float hz = b->size.z * 0.5f;
-    float h  = b->size.y * 0.45f;  // roof peak height above the wall top
+    float h  = b->size.y * 0.45f;  // peak height above the wall top
     float base = b->pos.y + b->size.y;
-    Vector3 c0 = RotateY((Vector3){-hx, 0, -hz}, b->rotY);
-    Vector3 c1 = RotateY((Vector3){ hx, 0, -hz}, b->rotY);
-    Vector3 c2 = RotateY((Vector3){ hx, 0,  hz}, b->rotY);
-    Vector3 c3 = RotateY((Vector3){-hx, 0,  hz}, b->rotY);
-    Vector3 r0 = RotateY((Vector3){-hx, 0,  0},  b->rotY);  // ridge near end
-    Vector3 r1 = RotateY((Vector3){ hx, 0,  0},  b->rotY);  // ridge far end
+    Vector3 c0 = RotateY((Vector3){-hx, 0, -hz}, b->rotY);  // front-left
+    Vector3 c1 = RotateY((Vector3){ hx, 0, -hz}, b->rotY);  // front-right
+    Vector3 c2 = RotateY((Vector3){ hx, 0,  hz}, b->rotY);  // back-right
+    Vector3 c3 = RotateY((Vector3){-hx, 0,  hz}, b->rotY);  // back-left
+    Vector3 r0 = RotateY((Vector3){-hx, 0,  0},  b->rotY);  // ridge left end
+    Vector3 r1 = RotateY((Vector3){ hx, 0,  0},  b->rotY);  // ridge right end
     Vector3 P0 = { b->pos.x + c0.x, base,     b->pos.z + c0.z };
     Vector3 P1 = { b->pos.x + c1.x, base,     b->pos.z + c1.z };
     Vector3 P2 = { b->pos.x + c2.x, base,     b->pos.z + c2.z };
     Vector3 P3 = { b->pos.x + c3.x, base,     b->pos.z + c3.z };
     Vector3 R0 = { b->pos.x + r0.x, base + h, b->pos.z + r0.z };
     Vector3 R1 = { b->pos.x + r1.x, base + h, b->pos.z + r1.z };
-    // Front & back gable triangles
-    DrawTriangle3D(P0, P1, R0, b->wall);
-    DrawTriangle3D(P1, R1, R0, b->wall);   // fill (one winding enough due to thickness)
-    DrawTriangle3D(P3, R1, P2, b->wall);
-    DrawTriangle3D(P3, R0, R1, b->wall);
-    // Roof slopes (two quads, both windings for visibility)
-    DrawTriangle3D(P0, R0, P3, b->roof);
-    DrawTriangle3D(R0, R1, P3, b->roof);  // hmm triangles mismatched; just draw both windings
-    DrawTriangle3D(P3, R0, P0, b->roof);
+
+    // Gables (wall colour) at x = ±hx — both windings so back-face culling
+    // can't swallow either end.
+    DrawTriangle3D(P0, P3, R0, b->wall);
+    DrawTriangle3D(P0, R0, P3, b->wall);
+    DrawTriangle3D(P1, R1, P2, b->wall);
+    DrawTriangle3D(P1, P2, R1, b->wall);
+
+    // Front slope: quad P0–P1 up to R0–R1 (roof colour, both windings).
+    DrawTriangle3D(P0, R0, P1, b->roof);
+    DrawTriangle3D(P1, R0, R1, b->roof);
+    DrawTriangle3D(P0, P1, R0, b->roof);
+    DrawTriangle3D(P1, R1, R0, b->roof);
+
+    // Back slope: quad P3–P2 up to R0–R1.
+    DrawTriangle3D(P3, P2, R1, b->roof);
     DrawTriangle3D(P3, R1, R0, b->roof);
-    DrawTriangle3D(P1, P2, R0, b->roof);
-    DrawTriangle3D(P2, R1, R0, b->roof);
-    DrawTriangle3D(P1, R0, P2, b->roof);
-    DrawTriangle3D(P2, R0, R1, b->roof);
+    DrawTriangle3D(P3, R1, P2, b->roof);
+    DrawTriangle3D(P3, R0, R1, b->roof);
 }
 
 void DrawTree(Vector3 pos, float size) {
