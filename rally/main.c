@@ -85,13 +85,15 @@ static float treeSizes[MAX_TREES];
 static int numTrees = 0;
 
 void GenerateTrack(void) {
-    // Winding rally course with varied curvature
+    // Winding rally course with varied curvature and gentle height.
     for (int i = 0; i < TRACK_SEGS; i++) {
         float t = (float)i / TRACK_SEGS * 2.0f * PI;
         // Irregular shape: deformed ellipse with tight corners
         float rx = 100.0f + sinf(t * 2.0f) * 35.0f + cosf(t * 3.0f) * 20.0f;
         float rz = 70.0f + cosf(t * 2.0f) * 25.0f + sinf(t * 5.0f) * 15.0f;
-        trackPts[i] = (Vector3){ cosf(t) * rx, 0, sinf(t) * rz };
+        // Two-octave height — gentle hills, no sharp drops.
+        float hy = sinf(t * 1.7f + 0.3f) * 1.8f + cosf(t * 3.1f + 0.7f) * 1.0f;
+        trackPts[i] = (Vector3){ cosf(t) * rx, hy, sinf(t) * rz };
 
         // Surface assignment: tarmac default, gravel/mud in sections
         if (i % 16 < 6) trackSurface[i] = SURF_GRAVEL;
@@ -99,7 +101,7 @@ void GenerateTrack(void) {
         else trackSurface[i] = SURF_TARMAC;
     }
 
-    // Smooth track
+    // Smooth track (all three axes).
     for (int pass = 0; pass < 4; pass++) {
         Vector3 temp[TRACK_SEGS];
         for (int i = 0; i < TRACK_SEGS; i++) {
@@ -107,12 +109,19 @@ void GenerateTrack(void) {
             int next = (i + 1) % TRACK_SEGS;
             temp[i] = (Vector3){
                 (trackPts[prev].x + trackPts[i].x * 2 + trackPts[next].x) / 4.0f,
-                0,
+                (trackPts[prev].y + trackPts[i].y * 2 + trackPts[next].y) / 4.0f,
                 (trackPts[prev].z + trackPts[i].z * 2 + trackPts[next].z) / 4.0f
             };
         }
         for (int i = 0; i < TRACK_SEGS; i++) trackPts[i] = temp[i];
     }
+
+    // Shift heights so the track sits on or above the ground plane (y=0).
+    // Keeps trees (which stay at y=0) from floating above or clipping under
+    // the road at dips.
+    float minY = 1e9f;
+    for (int i = 0; i < TRACK_SEGS; i++) if (trackPts[i].y < minY) minY = trackPts[i].y;
+    if (minY < 0.0f) for (int i = 0; i < TRACK_SEGS; i++) trackPts[i].y -= minY;
 
     // Compute directions and normals
     for (int i = 0; i < TRACK_SEGS; i++) {
@@ -129,6 +138,7 @@ void GenerateTrack(void) {
             if (GetRandomValue(0, 3) != 0) continue; // sparse
             float offset = (TRACK_WIDTH / 2.0f) + (float)GetRandomValue(3, 12);
             treePosns[numTrees] = Vector3Add(trackPts[i], Vector3Scale(trackNormals[i], side * offset));
+            treePosns[numTrees].y = 0;  // trees sit on the ground regardless of road height
             treeSizes[numTrees] = 1.0f + (float)GetRandomValue(0, 10) / 10.0f;
             numTrees++;
         }
@@ -156,6 +166,18 @@ int NearestSegLocal(Vector3 pos, int hint) {
         if (d < bestD) { bestD = d; best = idx; }
     }
     return best;
+}
+
+// Interpolated track-surface height at the XZ footprint of `pos`, plus
+// a small ride height so wheels sit on the road.
+float TrackHeightAt(Vector3 pos, int seg) {
+    int next = (seg + 1) % TRACK_SEGS;
+    Vector3 segDir = Vector3Subtract(trackPts[next], trackPts[seg]);
+    float segLen2 = segDir.x * segDir.x + segDir.z * segDir.z;
+    if (segLen2 < 1e-6f) return trackPts[seg].y + 0.2f;
+    float dx = pos.x - trackPts[seg].x, dz = pos.z - trackPts[seg].z;
+    float t = Clamp((dx * segDir.x + dz * segDir.z) / segLen2, 0.0f, 1.0f);
+    return trackPts[seg].y + (trackPts[next].y - trackPts[seg].y) * t + 0.2f;
 }
 
 // Get closest point on track segment for smooth distance
@@ -357,14 +379,14 @@ void DrawCar(Car *car, int colorIdx) {
         DrawPart(&tinted[i], car->pos, -car->rotation);
     }
 
-    // Shadow
-    DrawCircle3D((Vector3){car->pos.x, 0.01f, car->pos.z}, 1.0f,
+    // Shadow (sits just below the car on the track surface)
+    DrawCircle3D((Vector3){car->pos.x, car->pos.y - 0.19f, car->pos.z}, 1.0f,
         (Vector3){1,0,0}, 90, (Color){0,0,0,40});
 
     // Drift smoke
     if (car->drifting && car->speed > 10) {
         float cs = cosf(car->rotation), sn = sinf(car->rotation);
-        Vector3 rearPos = { car->pos.x - sn * 0.8f, 0.1f, car->pos.z + cs * 0.8f };
+        Vector3 rearPos = { car->pos.x - sn * 0.8f, car->pos.y - 0.1f, car->pos.z + cs * 0.8f };
         if (GetRandomValue(0, 2) == 0) SpawnDust(rearPos, (Color){200,200,200,150});
     }
 
@@ -372,7 +394,7 @@ void DrawCar(Car *car, int colorIdx) {
     SurfaceType surf = GetSurface(car->pos);
     if (car->speed > 15 && surf != SURF_TARMAC) {
         float cs = cosf(car->rotation), sn = sinf(car->rotation);
-        Vector3 rearPos = { car->pos.x - sn * 0.9f, 0.1f, car->pos.z + cs * 0.9f };
+        Vector3 rearPos = { car->pos.x - sn * 0.9f, car->pos.y - 0.1f, car->pos.z + cs * 0.9f };
         Color dustCol = (surf == SURF_GRAVEL) ? (Color){180,160,120,120} : (Color){100,80,50,120};
         if (GetRandomValue(0, 1) == 0) SpawnDust(rearPos, dustCol);
     }
@@ -517,7 +539,7 @@ moveCar:;
                 car->pos.x += newSn * car->speed * dt;
                 car->pos.z += newCs * car->speed * dt;
             }
-            car->pos.y = 0.2f;
+            car->pos.y = TrackHeightAt(car->pos, car->currentSeg);
 
             // Track boundary: only push when the car is actually past the edge.
             // The previous implementation triggered at (edgeDist - 3), i.e. the
