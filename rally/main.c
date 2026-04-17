@@ -36,6 +36,7 @@ typedef struct {
     int lap;
     int nextWP;
     int currentSeg;  // cached nearest segment
+    int prevSeg;     // last frame's currentSeg, for transition detection
     bool isPlayer;
     bool finished;
     bool drifting;
@@ -46,6 +47,16 @@ typedef struct {
 } Car;
 
 #define RALLY_GRAVITY 35.0f
+
+// Explicit launch-ramp segments — hitting one at speed triggers a jump.
+// Must match the rampSegs used in GenerateTrack().
+#define RAMP_COUNT 3
+static const int RAMP_SEGS[RAMP_COUNT] = { 12, 30, 48 };
+
+static bool IsRampSeg(int seg) {
+    for (int i = 0; i < RAMP_COUNT; i++) if (RAMP_SEGS[i] == seg) return true;
+    return false;
+}
 
 typedef struct {
     Vector3 pos;
@@ -122,9 +133,9 @@ void GenerateTrack(void) {
 
     // Explicit launch ramps — sharp bumps the smoothing won't flatten too
     // much. Placed on straightish sections so the car hits them square.
-    int rampSegs[] = { 12, 30, 48 };
-    for (int r = 0; r < (int)(sizeof(rampSegs)/sizeof(rampSegs[0])); r++) {
-        int s = rampSegs[r];
+    // These segments must match RAMP_SEGS (used by the launch logic).
+    for (int r = 0; r < RAMP_COUNT; r++) {
+        int s = RAMP_SEGS[r];
         trackPts[s].y += 4.0f;
         trackPts[(s + 1) % TRACK_SEGS].y += 1.5f;
         trackPts[(s + TRACK_SEGS - 1) % TRACK_SEGS].y += 1.5f;
@@ -450,6 +461,7 @@ int main(void) {
         cars[i].currentSeg = 0;
         cars[i].velY = 0;
         cars[i].airborne = false;
+        cars[i].prevSeg = 0;
         cars[i].isPlayer = (i == 0);
         cars[i].finished = false;
         cars[i].drifting = false;
@@ -569,18 +581,15 @@ moveCar:;
                 car->pos.x += newSn * car->speed * dt;
                 car->pos.z += newCs * car->speed * dt;
             }
-            // Refresh currentSeg NOW, before the vertical physics reads
-            // TrackHeightAt — otherwise a segment-boundary crossing causes
-            // targetY to "snap" between segments on the next frame and the
-            // resulting fake slope spike launches the car on flat terrain.
+            // Refresh currentSeg before reading TrackHeightAt so a
+            // segment-boundary crossing doesn't alias targetY against the
+            // old segment.
+            car->prevSeg = car->currentSeg;
             car->currentSeg = NearestSegLocal(car->pos, car->currentSeg);
 
             // --- Vertical / airborne physics ---
-            // While grounded we track the rate at which the road is rising
-            // under us (velY = slope rate). Launch happens when that rate
-            // was high (real ramp) and then turns over (road starts falling).
-            // Gentle undulations never trigger — the rate stays below
-            // threshold so no airborne transition.
+            // Natural hills just follow the road — only the explicit ramps
+            // launch the car. This keeps flat / rolling terrain stable.
             {
                 float targetY = TrackHeightAt(car->pos, car->currentSeg);
                 if (car->airborne) {
@@ -592,18 +601,24 @@ moveCar:;
                         car->airborne = false;
                     }
                 } else {
-                    float rate = (targetY - car->pos.y) / (dt > 1e-5f ? dt : 1e-5f);
-                    if (rate > 0.0f) {
-                        // Ascending — record rate for potential launch.
-                        car->velY = rate;
-                    } else if (car->velY > 8.0f) {
-                        // We were on a fast upslope and the road just turned
-                        // over — fly off the crest with the stored velY.
+                    // Stepping into a ramp segment this frame at speed?
+                    // That's the one moment we launch.
+                    bool justEnteredRamp =
+                        (car->currentSeg != car->prevSeg) && IsRampSeg(car->currentSeg);
+                    if (justEnteredRamp && fabsf(car->speed) > 15.0f) {
                         car->airborne = true;
+                        // Launch velocity scales with speed (capped) so slow
+                        // approaches don't fly but fast ones get real air.
+                        float launch = 6.0f + fabsf(car->speed) * 0.3f;
+                        if (launch > 20.0f) launch = 20.0f;
+                        car->velY = launch;
+                        // Keep pos.y on the ramp surface; physics takes over next frame.
+                        car->pos.y = targetY;
                     } else {
+                        // Glued to the road.
+                        car->pos.y = targetY;
                         car->velY = 0.0f;
                     }
-                    car->pos.y = targetY;
                 }
             }
 
