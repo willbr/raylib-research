@@ -458,7 +458,10 @@ moveCar:;
             }
 
             // Build Vehicle from Car state and run accel/drag/clamp/move.
-            float throttle = (accel > 0.0f) ? 1.0f : (accel < 0.0f) ? -1.0f : 0.0f;
+            // Normalise `accel` (continuous, includes AI rubber-band + corner
+            // multipliers) back to a −1..1 throttle. Player inputs degenerate
+            // to ±1; AI inputs preserve their fractional magnitude.
+            float throttle = Clamp(accel / CAR_ACCEL, -1.0f, 1.0f);
             Vehicle vh = { .pos = car->pos, .rotation = car->rotation, .speed = car->speed,
                            .accel = CAR_ACCEL, .brake = CAR_BRAKE, .maxSpeed = maxSpd,
                            .reverseMax = 10.0f, .turnRate = 0.0f, .drag = drag };
