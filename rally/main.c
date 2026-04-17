@@ -152,6 +152,24 @@ static float cpSplitTimes[NUM_CHECKPOINTS] = {0};
 static int cpNextIdx = 0;
 static float cpFlashTimer = 0.0f;
 
+// Replay: ring buffer of per-car snapshots captured at a fixed rate while
+// the race is running. After the finish cinematic, playback loops back
+// through the buffer and the cars' state is pulled from it.
+#define REPLAY_HZ        60
+#define REPLAY_CAPACITY  (REPLAY_HZ * 150)  // 2.5 minutes of race
+typedef struct {
+    Vector3 pos;
+    float rotation, speed, velY;
+    float visRoll, visPitch;
+    bool drifting, airborne;
+} ReplayFrame;
+static ReplayFrame replayBuf[NUM_CARS][REPLAY_CAPACITY];
+static int   replayWriteIdx = 0;
+static int   replayCount    = 0;       // valid frames (caps at REPLAY_CAPACITY)
+static float replayAccum    = 0.0f;    // drives fixed-rate capture
+static bool  replayActive   = false;
+static float replayReadT    = 0.0f;    // seconds into the replay
+
 void GenerateTrack(void) {
     // Winding rally course with varied curvature and gentle height.
     for (int i = 0; i < TRACK_SEGS; i++) {
@@ -884,10 +902,62 @@ int main(void) {
         if (!raceStarted && countdown <= 0) raceStarted = true;
         if (raceStarted && !cars[0].finished) { raceTimer += dt; lapTimer += dt; }
 
+        // --- Replay capture (fixed-rate ring-buffer while the race runs)
+        if (raceStarted && !cars[0].finished && !replayActive) {
+            replayAccum += dt;
+            float step = 1.0f / (float)REPLAY_HZ;
+            while (replayAccum >= step) {
+                replayAccum -= step;
+                for (int ci = 0; ci < NUM_CARS; ci++) {
+                    ReplayFrame *f = &replayBuf[ci][replayWriteIdx];
+                    f->pos      = cars[ci].pos;
+                    f->rotation = cars[ci].rotation;
+                    f->speed    = cars[ci].speed;
+                    f->velY     = cars[ci].velY;
+                    f->visRoll  = cars[ci].visRoll;
+                    f->visPitch = cars[ci].visPitch;
+                    f->drifting = cars[ci].drifting;
+                    f->airborne = cars[ci].airborne;
+                }
+                replayWriteIdx = (replayWriteIdx + 1) % REPLAY_CAPACITY;
+                if (replayCount < REPLAY_CAPACITY) replayCount++;
+            }
+        }
+
+        // --- Switch from finish cinematic to replay after 6 seconds.
+        if (cars[0].finished && finishCinTime >= 6.0f && !replayActive && replayCount > 0) {
+            replayActive = true;
+            replayReadT = 0.0f;
+        }
+
+        // --- While replaying, pull car state from the ring buffer and
+        //     skip physics. Loop the playback.
+        if (replayActive) {
+            int idx = (int)(replayReadT * (float)REPLAY_HZ);
+            if (idx >= replayCount - 1) { replayReadT = 0.0f; idx = 0; }
+            int start = (replayCount < REPLAY_CAPACITY)
+                        ? 0
+                        : replayWriteIdx;  // oldest valid entry
+            int read  = (start + idx) % REPLAY_CAPACITY;
+            for (int ci = 0; ci < NUM_CARS; ci++) {
+                ReplayFrame *f = &replayBuf[ci][read];
+                cars[ci].pos       = f->pos;
+                cars[ci].rotation  = f->rotation;
+                cars[ci].speed     = f->speed;
+                cars[ci].velY      = f->velY;
+                cars[ci].visRoll   = f->visRoll;
+                cars[ci].visPitch  = f->visPitch;
+                cars[ci].drifting  = f->drifting;
+                cars[ci].airborne  = f->airborne;
+            }
+            replayReadT += dt;
+        }
+
         // --- Update cars ---
         for (int ci = 0; ci < NUM_CARS; ci++) {
             Car *car = &cars[ci];
             if (car->finished) continue;
+            if (replayActive) continue;  // car state comes from the ring buffer
 
             float accel = 0, steer = 0;
             SurfaceType surf = GetSurface(car->pos);
@@ -1249,7 +1319,7 @@ moveCar:;
             if (CarProgress(&cars[i]) > CarProgress(&cars[0])) playerRank++;
 
         // --- Camera ---
-        if (cars[0].finished) {
+        if (cars[0].finished && !replayActive) {
             finishCinTime += dt;
             Car *p = &cars[0];
             float t = finishCinTime;
@@ -1488,8 +1558,8 @@ moveCar:;
             ArcTextOutlined("GO!", sw / 2 - gow / 2, sh / 2 - 110, 220, GREEN, BLACK);
         }
 
-        // Finish screen
-        if (cars[0].finished) {
+        // Finish screen (only during the cinematic, not during replay)
+        if (cars[0].finished && !replayActive) {
             DrawRectangle(0, 0, sw, sh, (Color){0, 0, 0, 120});
             ArcPanel(sw / 2 - 320, sh / 2 - 140, 640, 280,
                      (Color){10, 15, 30, 230}, (Color){255, 215, 0, 255});
@@ -1507,6 +1577,14 @@ moveCar:;
                 int bw = MeasureText(bTxt, 36);
                 ArcText(bTxt, sw / 2 - bw / 2, sh / 2 + 40, 36, YELLOW);
             }
+        }
+
+        // Replay banner (pulsing red dot + "REPLAY" label, top-left under FPS)
+        if (replayActive) {
+            float blink = (fmodf(raceTimer * 2.0f, 1.0f) < 0.5f) ? 1.0f : 0.4f;
+            Color dotCol = (Color){220, 50, 50, (unsigned char)(220 * blink)};
+            DrawCircle(150, 26, 10, dotCol);
+            ArcText("REPLAY", 170, 14, 24, (Color){230, 230, 230, 255});
         }
 
         // Help text and FPS (more visible)
