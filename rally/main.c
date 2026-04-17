@@ -188,7 +188,10 @@ void GenerateTrack(void) {
         for (int side = -1; side <= 1; side += 2) {
             if (numTrees >= MAX_TREES) break;
             if (GetRandomValue(0, 3) != 0) continue; // sparse
-            float offset = (TRACK_WIDTH / 2.0f) + (float)GetRandomValue(3, 12);
+            // Keep trees clear of the bank geometry (road edge + BANK_WIDTH)
+            // — they'd otherwise be swallowed by the sloping bank quads.
+            float offset = (TRACK_WIDTH / 2.0f) + BANK_WIDTH + 1.5f
+                         + (float)GetRandomValue(0, 10);
             treePosns[numTrees] = Vector3Add(trackPts[i], Vector3Scale(trackNormals[i], side * offset));
             treePosns[numTrees].y = 0;  // trees sit on the ground regardless of road height
             treeSizes[numTrees] = 1.0f + (float)GetRandomValue(0, 10) / 10.0f;
