@@ -193,7 +193,10 @@ void GenerateTrack(void) {
             float offset = (TRACK_WIDTH / 2.0f) + BANK_WIDTH + 1.5f
                          + (float)GetRandomValue(0, 10);
             treePosns[numTrees] = Vector3Add(trackPts[i], Vector3Scale(trackNormals[i], side * offset));
-            treePosns[numTrees].y = 0;  // trees sit on the ground regardless of road height
+            // Plant the tree at its adjacent track segment's height so it
+            // rides the same terrain as the road — the flat ground plane
+            // is way below once the track gains height variation.
+            treePosns[numTrees].y = trackPts[i].y;
             treeSizes[numTrees] = 1.0f + (float)GetRandomValue(0, 10) / 10.0f;
             numTrees++;
         }
