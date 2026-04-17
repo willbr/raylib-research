@@ -811,8 +811,11 @@ moveCar:;
             {
                 float steerMag  = car->steerInput / CAR_TURN;
                 float speedFrac = fabsf(car->speed) / CAR_MAX_SPEED;
-                float targetRoll = -steerMag * speedFrac * 0.22f;
-                if (car->drifting)  targetRoll *= 1.8f;
+                // Subtle body lean — a real rally car rolls maybe 3–5° in a
+                // hard corner. 0.22 rad at 1.8× drift mult was ~22°, enough
+                // that the inside wheels lifted off the road visually.
+                float targetRoll = -steerMag * speedFrac * 0.08f;
+                if (car->drifting)  targetRoll *= 1.4f;
                 if (car->airborne)  targetRoll *= 0.3f;
 
                 float targetPitch = 0.0f;
