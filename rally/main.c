@@ -938,26 +938,40 @@ int main(void) {
         }
 
         // --- While replaying, pull car state from the ring buffer and
-        //     skip physics. Loop the playback.
+        //     skip physics. Interpolate between the two nearest snapshots
+        //     so the 60 Hz capture plays smoothly at the render rate.
         if (replayActive) {
-            int idx = (int)(replayReadT * (float)REPLAY_HZ);
-            if (idx >= replayCount - 1) { replayReadT = 0.0f; idx = 0; }
+            float pos = replayReadT * (float)REPLAY_HZ;
+            int idx = (int)pos;
+            float frac = pos - (float)idx;
+            if (idx >= replayCount - 1) { replayReadT = 0.0f; idx = 0; frac = 0.0f; }
             int start = (replayCount < REPLAY_CAPACITY)
                         ? 0
                         : replayWriteIdx;  // oldest valid entry
-            int read  = (start + idx) % REPLAY_CAPACITY;
+            int readA = (start + idx)     % REPLAY_CAPACITY;
+            int readB = (start + idx + 1) % REPLAY_CAPACITY;
             for (int ci = 0; ci < NUM_CARS; ci++) {
-                ReplayFrame *f = &replayBuf[ci][read];
-                cars[ci].pos       = f->pos;
-                cars[ci].rotation  = f->rotation;
-                cars[ci].speed     = f->speed;
-                cars[ci].velY      = f->velY;
-                cars[ci].visRoll   = f->visRoll;
-                cars[ci].visPitch  = f->visPitch;
-                cars[ci].drifting  = f->drifting;
-                cars[ci].airborne  = f->airborne;
-                cars[ci].lap       = f->lap;
-                cars[ci].nextWP    = f->nextWP;
+                ReplayFrame *a = &replayBuf[ci][readA];
+                ReplayFrame *b = &replayBuf[ci][readB];
+                // Position / scalars: straight lerp.
+                cars[ci].pos.x     = a->pos.x     + (b->pos.x     - a->pos.x)     * frac;
+                cars[ci].pos.y     = a->pos.y     + (b->pos.y     - a->pos.y)     * frac;
+                cars[ci].pos.z     = a->pos.z     + (b->pos.z     - a->pos.z)     * frac;
+                cars[ci].speed     = a->speed     + (b->speed     - a->speed)     * frac;
+                cars[ci].velY      = a->velY      + (b->velY      - a->velY)      * frac;
+                cars[ci].visRoll   = a->visRoll   + (b->visRoll   - a->visRoll)   * frac;
+                cars[ci].visPitch  = a->visPitch  + (b->visPitch  - a->visPitch)  * frac;
+                // Rotation: shortest-arc lerp so no snap through ±π.
+                float dr = b->rotation - a->rotation;
+                while (dr >  PI) dr -= 2.0f * PI;
+                while (dr < -PI) dr += 2.0f * PI;
+                cars[ci].rotation  = a->rotation + dr * frac;
+                // Discrete fields pick from the nearer snapshot.
+                ReplayFrame *near = (frac < 0.5f) ? a : b;
+                cars[ci].drifting  = near->drifting;
+                cars[ci].airborne  = near->airborne;
+                cars[ci].lap       = near->lap;
+                cars[ci].nextWP    = near->nextWP;
             }
             replayReadT += dt;
         }
