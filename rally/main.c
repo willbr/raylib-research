@@ -323,6 +323,29 @@ static void ArcPanel(int x, int y, int w, int h, Color fill, Color border) {
     DrawRectangleLinesEx((Rectangle){(float)x, (float)y, (float)w, (float)h}, 3.0f, border);
 }
 
+// Monospaced rendering for changing numeric fields (race timer, speed) so
+// they don't shimmy as individual glyphs in the default font have different
+// widths. Each glyph is centered in a cell as wide as '0'.
+static int ArcMonoCell(int size) { return MeasureText("0", size); }
+
+static int ArcMonoWidth(const char *t, int size) {
+    int len = 0;
+    while (t[len]) len++;
+    return len * ArcMonoCell(size);
+}
+
+static void ArcTextMono(const char *t, int x, int y, int size, Color col) {
+    int off  = size >= 40 ? 4 : (size >= 24 ? 3 : 2);
+    int cell = ArcMonoCell(size);
+    for (int i = 0; t[i]; i++) {
+        char s[2] = { t[i], 0 };
+        int cw = MeasureText(s, size);
+        int cx = x + i * cell + (cell - cw) / 2;
+        DrawText(s, cx + off, y + off, size, (Color){0, 0, 0, 200});
+        DrawText(s, cx, y, size, col);
+    }
+}
+
 void DrawCar(Car *car, int colorIdx) {
     // Copy parts and tint body color
     Part tinted[sizeof(carBody)/sizeof(Part)];
@@ -647,8 +670,11 @@ moveCar:;
             ArcPanel(px, py, panelW, panelH, (Color){0, 0, 0, 200}, (Color){0, 200, 255, 255});
             int kph = (int)(fabsf(cars[0].speed) * 3.6f);
             const char *speedTxt = TextFormat("%d", kph);
-            int speedW = MeasureText(speedTxt, 64);
-            ArcText(speedTxt, px + panelW - speedW - 70, py + 12, 64, (Color){0, 220, 255, 255});
+            // Right-align the mono digits inside a 3-digit slot.
+            int speedSlot = 3 * ArcMonoCell(64);
+            int speedW = ArcMonoWidth(speedTxt, 64);
+            ArcTextMono(speedTxt, px + panelW - speedSlot - 70 + (speedSlot - speedW),
+                        py + 12, 64, (Color){0, 220, 255, 255});
             ArcText("KM/H", px + panelW - 60, py + 40, 24, (Color){0, 180, 220, 255});
 
             // Surface label above speedometer
@@ -677,17 +703,25 @@ moveCar:;
         int mins = (int)raceTimer / 60, secs = (int)raceTimer % 60;
         int ms = (int)(fmodf(raceTimer, 1.0f) * 100);
         const char *timeTxt = TextFormat("%d:%02d.%02d", mins, secs, ms);
-        int timeW = MeasureText(timeTxt, 34);
-        ArcText(timeTxt, sw - timeW - 30, 160, 34, (Color){0, 220, 255, 255});
+        int timeW = ArcMonoWidth(timeTxt, 34);
+        ArcTextMono(timeTxt, sw - timeW - 30, 160, 34, (Color){0, 220, 255, 255});
 
-        const char *lapTimeTxt = TextFormat("LAP  %.2f", lapTimer);
-        int ltW = MeasureText(lapTimeTxt, 24);
-        ArcText(lapTimeTxt, sw - ltW - 30, 200, 24, (Color){220, 220, 230, 255});
+        // Split "LAP " (static) from the number (mono) so the fixed text
+        // keeps its natural kerning while the digits don't shimmy.
+        const char *lapNumTxt  = TextFormat("%.2f", lapTimer);
+        int lapNumW  = ArcMonoWidth(lapNumTxt, 24);
+        int lapLabelW = MeasureText("LAP ", 24);
+        int lapTotalW = lapLabelW + lapNumW;
+        ArcText    ("LAP ",     sw - lapTotalW - 30,             200, 24, (Color){220, 220, 230, 255});
+        ArcTextMono(lapNumTxt,  sw - lapNumW - 30,               200, 24, (Color){220, 220, 230, 255});
 
         if (bestLapTime < 999.0f) {
-            const char *bestTxt = TextFormat("BEST %.2f", bestLapTime);
-            int bW = MeasureText(bestTxt, 24);
-            ArcText(bestTxt, sw - bW - 30, 228, 24, YELLOW);
+            const char *bestNumTxt = TextFormat("%.2f", bestLapTime);
+            int bestNumW  = ArcMonoWidth(bestNumTxt, 24);
+            int bestLabelW = MeasureText("BEST ", 24);
+            int bestTotalW = bestLabelW + bestNumW;
+            ArcText    ("BEST ",    sw - bestTotalW - 30,            228, 24, YELLOW);
+            ArcTextMono(bestNumTxt, sw - bestNumW - 30,              228, 24, YELLOW);
         }
 
         // Drift/boost (top-center, flashy)
@@ -790,7 +824,13 @@ moveCar:;
         // Help text and FPS (more visible)
         ArcText("WASD: DRIVE   SHIFT/CTRL+TURN: DRIFT   RELEASE FOR BOOST",
                 20, sh - 22, 16, (Color){140, 140, 170, 230});
-        ArcText(TextFormat("%d FPS", GetFPS()), 20, 15, 22, GREEN);
+        // FPS also mono so the counter doesn't shimmy.
+        {
+            const char *fpsTxt = TextFormat("%d", GetFPS());
+            int fpsNumW = ArcMonoWidth(fpsTxt, 22);
+            ArcTextMono(fpsTxt, 20, 15, 22, GREEN);
+            ArcText(" FPS", 20 + fpsNumW, 15, 22, GREEN);
+        }
         EndDrawing();
     }
 
