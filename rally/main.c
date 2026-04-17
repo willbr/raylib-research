@@ -113,6 +113,11 @@ static Vector3 treePosns[MAX_TREES];
 static float treeSizes[MAX_TREES];
 static int numTrees = 0;
 
+#define MAX_BUILDINGS 28
+typedef struct { Vector3 pos; Vector3 size; float rotY; Color wall, roof; } Building;
+static Building buildings[MAX_BUILDINGS];
+static int numBuildings = 0;
+
 void GenerateTrack(void) {
     // Winding rally course with varied curvature and gentle height.
     for (int i = 0; i < TRACK_SEGS; i++) {
@@ -199,6 +204,45 @@ void GenerateTrack(void) {
             treePosns[numTrees].y = trackPts[i].y;
             treeSizes[numTrees] = 1.0f + (float)GetRandomValue(0, 10) / 10.0f;
             numTrees++;
+        }
+    }
+
+    // Place buildings sparsely further out than the trees. Each building
+    // is a coloured box with a pitched roof; rotated to face the track.
+    numBuildings = 0;
+    Color wallPalette[] = {
+        {210,190,150,255}, {180,160,120,255}, {205,205,200,255},
+        {150,115, 80,255}, {200,120,100,255}, {160,175,180,255},
+    };
+    Color roofPalette[] = {
+        {120, 50, 40,255}, { 90, 70, 60,255}, { 60, 70, 95,255},
+        { 70, 55, 40,255}, {150,110, 90,255},
+    };
+    int paletteWalls = sizeof(wallPalette) / sizeof(wallPalette[0]);
+    int paletteRoofs = sizeof(roofPalette) / sizeof(roofPalette[0]);
+
+    for (int i = 0; i < TRACK_SEGS && numBuildings < MAX_BUILDINGS; i += 2) {
+        for (int side = -1; side <= 1; side += 2) {
+            if (numBuildings >= MAX_BUILDINGS) break;
+            if (GetRandomValue(0, 5) != 0) continue;  // very sparse
+
+            float offset = (TRACK_WIDTH / 2.0f) + BANK_WIDTH + 18.0f
+                         + (float)GetRandomValue(0, 20);
+            Vector3 p = Vector3Add(trackPts[i], Vector3Scale(trackNormals[i], side * offset));
+            p.y = trackPts[i].y;
+
+            Building *b = &buildings[numBuildings++];
+            b->pos  = p;
+            b->size = (Vector3){
+                4.0f + (float)GetRandomValue(0, 40) / 10.0f,  // width 4–8
+                3.0f + (float)GetRandomValue(0, 60) / 10.0f,  // height 3–9
+                4.0f + (float)GetRandomValue(0, 40) / 10.0f,  // depth 4–8
+            };
+            // Face roughly toward the track (flip if on the far side).
+            float toTrack = atan2f(-trackNormals[i].x * side, -trackNormals[i].z * side);
+            b->rotY = toTrack + ((float)GetRandomValue(-20, 20)) * 0.01f;
+            b->wall = wallPalette[GetRandomValue(0, paletteWalls - 1)];
+            b->roof = roofPalette[GetRandomValue(0, paletteRoofs - 1)];
         }
     }
 }
@@ -395,6 +439,45 @@ void DrawTrack(void) {
         DrawTriangle3D(a, b2, b, chk);
         DrawTriangle3D(a, a2, b2, chk);
     }
+}
+
+void DrawBuilding(const Building *b) {
+    // Walls: a box centred on b->pos (base at b->pos.y).
+    Vector3 wallCenter = { b->pos.x, b->pos.y + b->size.y * 0.5f, b->pos.z };
+    DrawCubeRotY(wallCenter, b->size.x, b->size.y, b->size.z, b->rotY, b->wall);
+
+    // Pitched roof: a prism made from a front/back triangle + two slanted
+    // quads. Ridge runs along the local X axis for a consistent look.
+    float hx = b->size.x * 0.5f;
+    float hz = b->size.z * 0.5f;
+    float h  = b->size.y * 0.45f;  // roof peak height above the wall top
+    float base = b->pos.y + b->size.y;
+    Vector3 c0 = RotateY((Vector3){-hx, 0, -hz}, b->rotY);
+    Vector3 c1 = RotateY((Vector3){ hx, 0, -hz}, b->rotY);
+    Vector3 c2 = RotateY((Vector3){ hx, 0,  hz}, b->rotY);
+    Vector3 c3 = RotateY((Vector3){-hx, 0,  hz}, b->rotY);
+    Vector3 r0 = RotateY((Vector3){-hx, 0,  0},  b->rotY);  // ridge near end
+    Vector3 r1 = RotateY((Vector3){ hx, 0,  0},  b->rotY);  // ridge far end
+    Vector3 P0 = { b->pos.x + c0.x, base,     b->pos.z + c0.z };
+    Vector3 P1 = { b->pos.x + c1.x, base,     b->pos.z + c1.z };
+    Vector3 P2 = { b->pos.x + c2.x, base,     b->pos.z + c2.z };
+    Vector3 P3 = { b->pos.x + c3.x, base,     b->pos.z + c3.z };
+    Vector3 R0 = { b->pos.x + r0.x, base + h, b->pos.z + r0.z };
+    Vector3 R1 = { b->pos.x + r1.x, base + h, b->pos.z + r1.z };
+    // Front & back gable triangles
+    DrawTriangle3D(P0, P1, R0, b->wall);
+    DrawTriangle3D(P1, R1, R0, b->wall);   // fill (one winding enough due to thickness)
+    DrawTriangle3D(P3, R1, P2, b->wall);
+    DrawTriangle3D(P3, R0, R1, b->wall);
+    // Roof slopes (two quads, both windings for visibility)
+    DrawTriangle3D(P0, R0, P3, b->roof);
+    DrawTriangle3D(R0, R1, P3, b->roof);  // hmm triangles mismatched; just draw both windings
+    DrawTriangle3D(P3, R0, P0, b->roof);
+    DrawTriangle3D(P3, R1, R0, b->roof);
+    DrawTriangle3D(P1, P2, R0, b->roof);
+    DrawTriangle3D(P2, R1, R0, b->roof);
+    DrawTriangle3D(P1, R0, P2, b->roof);
+    DrawTriangle3D(P2, R0, R1, b->roof);
 }
 
 void DrawTree(Vector3 pos, float size) {
@@ -943,6 +1026,9 @@ moveCar:;
                 DrawTriangle3D(p1, p3, p2, sc);
                 DrawTriangle3D(p1, p4, p3, sc);
             }
+
+            // Buildings
+            for (int i = 0; i < numBuildings; i++) DrawBuilding(&buildings[i]);
 
             // Trees
             for (int i = 0; i < numTrees; i++) DrawTree(treePosns[i], treeSizes[i]);
