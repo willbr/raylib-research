@@ -976,24 +976,22 @@ moveCar:;
             Car *p = &cars[0];
             float cs = cosf(p->rotation), sn = sinf(p->rotation);
             float speedPct = Clamp(fabsf(p->speed) / CAR_MAX_SPEED, 0, 1.2f);
-            float camDist = 4.5f - speedPct * 1.0f;
-            float camH = 2.2f - speedPct * 0.3f;
+            float camDist = 2.8f - speedPct * 0.6f;   // pulled right in behind the car
+            float camH    = 1.4f - speedPct * 0.2f;
             Vector3 camPos = {
                 p->pos.x - sn * camDist,
                 p->pos.y + camH,
-                p->pos.z - cs * camDist  // fixed: was +cs, should be -cs to be behind
+                p->pos.z - cs * camDist
             };
             Vector3 camTarget = {
-                p->pos.x + sn * 4.0f,
+                p->pos.x + sn * 2.0f,   // look less far past the car so it fills more of the frame
                 p->pos.y + 0.5f,
-                p->pos.z + cs * 4.0f
+                p->pos.z + cs * 2.0f
             };
-            // Tight follow: at 144fps a 5.0*dt lerp left ~8 units of
-            // positional lag at top speed, making the car look tiny.
             camera.position = Vector3Lerp(camera.position, camPos,    20.0f * dt);
             camera.target   = Vector3Lerp(camera.target,   camTarget, 20.0f * dt);
 
-            float targetFov = 55.0f + speedPct * 15.0f;
+            float targetFov = 48.0f + speedPct * 12.0f;  // narrower base FOV = bigger car
             camera.fovy += (targetFov - camera.fovy) * 4.0f * dt;
         }
 
