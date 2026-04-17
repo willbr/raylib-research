@@ -31,6 +31,8 @@ typedef struct {
     Vector3 pos;
     float rotation;
     float speed;
+    float velY;      // vertical speed (only non-zero when airborne)
+    bool airborne;   // off the ground — gravity applies, no road-follow
     int lap;
     int nextWP;
     int currentSeg;  // cached nearest segment
@@ -42,6 +44,8 @@ typedef struct {
     float aiNoise;
     float steerInput;
 } Car;
+
+#define RALLY_GRAVITY 35.0f
 
 typedef struct {
     Vector3 pos;
@@ -116,9 +120,32 @@ void GenerateTrack(void) {
         for (int i = 0; i < TRACK_SEGS; i++) trackPts[i] = temp[i];
     }
 
-    // Shift heights so the track sits on or above the ground plane (y=0).
-    // Keeps trees (which stay at y=0) from floating above or clipping under
-    // the road at dips.
+    // Explicit launch ramps — sharp bumps the smoothing won't flatten too
+    // much. Placed on straightish sections so the car hits them square.
+    int rampSegs[] = { 12, 30, 48 };
+    for (int r = 0; r < (int)(sizeof(rampSegs)/sizeof(rampSegs[0])); r++) {
+        int s = rampSegs[r];
+        trackPts[s].y += 4.0f;
+        trackPts[(s + 1) % TRACK_SEGS].y += 1.5f;
+        trackPts[(s + TRACK_SEGS - 1) % TRACK_SEGS].y += 1.5f;
+    }
+
+    // Final light smoothing so ramp approach/landing isn't a cliff, then
+    // shift so the lowest point sits on the ground plane (trees stay at y=0).
+    for (int pass = 0; pass < 1; pass++) {
+        Vector3 temp[TRACK_SEGS];
+        for (int i = 0; i < TRACK_SEGS; i++) {
+            int prev = (i - 1 + TRACK_SEGS) % TRACK_SEGS;
+            int next = (i + 1) % TRACK_SEGS;
+            temp[i] = (Vector3){
+                trackPts[i].x,
+                (trackPts[prev].y + trackPts[i].y * 2 + trackPts[next].y) / 4.0f,
+                trackPts[i].z
+            };
+        }
+        for (int i = 0; i < TRACK_SEGS; i++) trackPts[i] = temp[i];
+    }
+
     float minY = 1e9f;
     for (int i = 0; i < TRACK_SEGS; i++) if (trackPts[i].y < minY) minY = trackPts[i].y;
     if (minY < 0.0f) for (int i = 0; i < TRACK_SEGS; i++) trackPts[i].y -= minY;
@@ -421,6 +448,8 @@ int main(void) {
         cars[i].lap = 0;
         cars[i].nextWP = 1;
         cars[i].currentSeg = 0;
+        cars[i].velY = 0;
+        cars[i].airborne = false;
         cars[i].isPlayer = (i == 0);
         cars[i].finished = false;
         cars[i].drifting = false;
@@ -540,7 +569,28 @@ moveCar:;
                 car->pos.x += newSn * car->speed * dt;
                 car->pos.z += newCs * car->speed * dt;
             }
-            car->pos.y = TrackHeightAt(car->pos, car->currentSeg);
+            // --- Vertical / airborne physics ---
+            // The road acts as a one-way floor: if it rises above us we get
+            // pushed up (and carry that upward velocity past the crest for a
+            // real jump). Otherwise gravity takes over until we land.
+            float targetY = TrackHeightAt(car->pos, car->currentSeg);
+            if (!car->airborne && targetY > car->pos.y) {
+                // Road rising — convert the push into vertical momentum so
+                // the car flies off crests (Sega Rally feel).
+                car->velY = (targetY - car->pos.y) / (dt > 1e-5f ? dt : 1e-5f);
+                if (car->velY > 18.0f) car->velY = 18.0f;  // clamp silly launches
+                car->pos.y = targetY;
+            } else {
+                car->velY -= RALLY_GRAVITY * dt;
+                car->pos.y += car->velY * dt;
+                if (car->pos.y <= targetY) {
+                    car->pos.y = targetY;
+                    car->velY = 0.0f;
+                    car->airborne = false;
+                } else {
+                    car->airborne = true;
+                }
+            }
 
             // Track boundary: only push when the car is actually past the edge.
             // The previous implementation triggered at (edgeDist - 3), i.e. the
