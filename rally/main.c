@@ -569,26 +569,41 @@ moveCar:;
                 car->pos.x += newSn * car->speed * dt;
                 car->pos.z += newCs * car->speed * dt;
             }
+            // Refresh currentSeg NOW, before the vertical physics reads
+            // TrackHeightAt — otherwise a segment-boundary crossing causes
+            // targetY to "snap" between segments on the next frame and the
+            // resulting fake slope spike launches the car on flat terrain.
+            car->currentSeg = NearestSegLocal(car->pos, car->currentSeg);
+
             // --- Vertical / airborne physics ---
-            // The road acts as a one-way floor: if it rises above us we get
-            // pushed up (and carry that upward velocity past the crest for a
-            // real jump). Otherwise gravity takes over until we land.
-            float targetY = TrackHeightAt(car->pos, car->currentSeg);
-            if (!car->airborne && targetY > car->pos.y) {
-                // Road rising — convert the push into vertical momentum so
-                // the car flies off crests (Sega Rally feel).
-                car->velY = (targetY - car->pos.y) / (dt > 1e-5f ? dt : 1e-5f);
-                if (car->velY > 18.0f) car->velY = 18.0f;  // clamp silly launches
-                car->pos.y = targetY;
-            } else {
-                car->velY -= RALLY_GRAVITY * dt;
-                car->pos.y += car->velY * dt;
-                if (car->pos.y <= targetY) {
-                    car->pos.y = targetY;
-                    car->velY = 0.0f;
-                    car->airborne = false;
+            // While grounded we track the rate at which the road is rising
+            // under us (velY = slope rate). Launch happens when that rate
+            // was high (real ramp) and then turns over (road starts falling).
+            // Gentle undulations never trigger — the rate stays below
+            // threshold so no airborne transition.
+            {
+                float targetY = TrackHeightAt(car->pos, car->currentSeg);
+                if (car->airborne) {
+                    car->velY -= RALLY_GRAVITY * dt;
+                    car->pos.y += car->velY * dt;
+                    if (car->pos.y <= targetY) {
+                        car->pos.y = targetY;
+                        car->velY = 0.0f;
+                        car->airborne = false;
+                    }
                 } else {
-                    car->airborne = true;
+                    float rate = (targetY - car->pos.y) / (dt > 1e-5f ? dt : 1e-5f);
+                    if (rate > 0.0f) {
+                        // Ascending — record rate for potential launch.
+                        car->velY = rate;
+                    } else if (car->velY > 8.0f) {
+                        // We were on a fast upslope and the road just turned
+                        // over — fly off the crest with the stored velY.
+                        car->airborne = true;
+                    } else {
+                        car->velY = 0.0f;
+                    }
+                    car->pos.y = targetY;
                 }
             }
 
@@ -597,7 +612,6 @@ moveCar:;
             // inner 40% of the track, so it was constantly nudging the car
             // toward centerline during normal driving — felt like teleporting.
             // Inside the track: total freedom. Past the edge: linear capped push.
-            car->currentSeg = NearestSegLocal(car->pos, car->currentSeg);
             Vector3 closest = ClosestPointOnSeg(car->pos, car->currentSeg);
             Vector3 toCenter = Vector3Subtract(closest, car->pos);
             toCenter.y = 0;
