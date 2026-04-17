@@ -1320,8 +1320,10 @@ moveCar:;
                 }
             }
 
-            // Waypoint progression
-            float wpDist = Vector3Distance(car->pos, trackPts[car->nextWP]);
+            // Waypoint progression (XZ-only — vertical offset from ramps
+            // or airborne landings shouldn't prevent the waypoint from
+            // registering).
+            float wpDist = XZDistance(car->pos, trackPts[car->nextWP]);
             if (wpDist < 10.0f) {
                 int prev = car->nextWP;
                 car->nextWP = (car->nextWP + 1) % TRACK_SEGS;
