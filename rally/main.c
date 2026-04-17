@@ -162,6 +162,7 @@ typedef struct {
     float rotation, speed, velY;
     float visRoll, visPitch;
     bool drifting, airborne;
+    int lap, nextWP;
 } ReplayFrame;
 static ReplayFrame replayBuf[NUM_CARS][REPLAY_CAPACITY];
 static int   replayWriteIdx = 0;
@@ -918,6 +919,8 @@ int main(void) {
                     f->visPitch = cars[ci].visPitch;
                     f->drifting = cars[ci].drifting;
                     f->airborne = cars[ci].airborne;
+                    f->lap      = cars[ci].lap;
+                    f->nextWP   = cars[ci].nextWP;
                 }
                 replayWriteIdx = (replayWriteIdx + 1) % REPLAY_CAPACITY;
                 if (replayCount < REPLAY_CAPACITY) replayCount++;
@@ -949,6 +952,8 @@ int main(void) {
                 cars[ci].visPitch  = f->visPitch;
                 cars[ci].drifting  = f->drifting;
                 cars[ci].airborne  = f->airborne;
+                cars[ci].lap       = f->lap;
+                cars[ci].nextWP    = f->nextWP;
             }
             replayReadT += dt;
         }
