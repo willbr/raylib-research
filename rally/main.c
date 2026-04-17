@@ -898,6 +898,13 @@ int main(void) {
     float splitTimes[TOTAL_LAPS] = {0};
     float finishCinTime = 0.0f;  // seconds since player crossed finish line
 
+    // Chase-cam state: a lagged yaw the camera rotates with, and landing
+    // feedback (shake + target-pitch drop).
+    float camYaw       = 0.0f;
+    bool  camYawInit   = false;
+    float camShakeAmp  = 0.0f;
+    float camPitchDrop = 0.0f;
+
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
         if (dt > 0.033f) dt = 0.033f;
@@ -1107,6 +1114,19 @@ moveCar:;
                         // the nose dips on impact and then bounces back.
                         // velY here is the downward impact velocity (negative).
                         car->visPitchVel -= car->velY * 0.055f;
+                        // Camera kick on the player's landing — tiny shake
+                        // + a brief downward target drop.
+                        if (car->isPlayer) {
+                            float impact = -car->velY;
+                            if (impact > 2.0f) {
+                                float sa = impact * 0.045f;
+                                float pd = impact * 0.03f;
+                                if (sa > 0.45f) sa = 0.45f;
+                                if (pd > 0.35f) pd = 0.35f;
+                                if (sa > camShakeAmp)  camShakeAmp  = sa;
+                                if (pd > camPitchDrop) camPitchDrop = pd;
+                            }
+                        }
                         car->velY = 0.0f;
                         car->airborne = false;
                     }
@@ -1410,25 +1430,48 @@ moveCar:;
             camera.fovy    += (52.0f - camera.fovy) * 3.0f * dt;
         } else {
             Car *p = &cars[0];
-            float cs = cosf(p->rotation), sn = sinf(p->rotation);
+            if (!camYawInit) { camYaw = p->rotation; camYawInit = true; }
+
+            // Camera yaw lags the car's yaw so hard turns visibly sweep
+            // the car across the frame (Sega Rally signature).
+            float yd = p->rotation - camYaw;
+            while (yd >   PI) yd -= 2.0f * PI;
+            while (yd <= -PI) yd += 2.0f * PI;
+            camYaw += yd * (1.0f - expf(-5.0f * dt));
+
             float speedPct = Clamp(fabsf(p->speed) / CAR_MAX_SPEED, 0, 1.2f);
-            float camDist = 2.8f - speedPct * 0.6f;   // pulled right in behind the car
-            float camH    = 1.4f - speedPct * 0.2f;
+            float camDist = 5.5f;                         // fixed — FOV sells speed
+            float camH    = 2.4f - speedPct * 0.3f;
+            float cs = cosf(camYaw), sn = sinf(camYaw);
             Vector3 camPos = {
                 p->pos.x - sn * camDist,
                 p->pos.y + camH,
                 p->pos.z - cs * camDist
             };
+            // Aim at the car's roofline — fills the frame without the old
+            // forward-offset that pushed the car low.
             Vector3 camTarget = {
-                p->pos.x + sn * 2.0f,   // look less far past the car so it fills more of the frame
-                p->pos.y + 0.5f,
-                p->pos.z + cs * 2.0f
+                p->pos.x,
+                p->pos.y + 1.0f,
+                p->pos.z
             };
             camera.position = Vector3Lerp(camera.position, camPos,    20.0f * dt);
             camera.target   = Vector3Lerp(camera.target,   camTarget, 20.0f * dt);
 
-            float targetFov = 48.0f + speedPct * 12.0f;  // narrower base FOV = bigger car
+            float targetFov = 55.0f + speedPct * 20.0f;   // stronger curve sells speed
             camera.fovy += (targetFov - camera.fovy) * 4.0f * dt;
+
+            // Landing feedback: decay, then apply shake to position and
+            // a brief drop to the target y.
+            camShakeAmp  *= expf(-8.0f * dt);
+            camPitchDrop *= expf(-6.0f * dt);
+            if (camShakeAmp > 0.001f) {
+                float jx = ((float)GetRandomValue(-100, 100) / 100.0f) * camShakeAmp;
+                float jy = ((float)GetRandomValue(-100, 100) / 100.0f) * camShakeAmp;
+                camera.position.x += jx;
+                camera.position.y += jy;
+            }
+            camera.target.y -= camPitchDrop;
         }
 
         // --- Rear-view mirror pass: render from a camera facing backwards
