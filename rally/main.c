@@ -144,6 +144,14 @@ typedef struct { Vector3 pos; Color shirt; float phase; } Fan;
 static Fan fans[MAX_FANS];
 static int numFans = 0;
 
+// Checkpoint gates — drawn as arches across the road at fixed segments.
+// Crossing one banks a split time for the current lap.
+#define NUM_CHECKPOINTS 3
+static const int CHECKPOINT_SEGS[NUM_CHECKPOINTS] = { 16, 32, 48 };
+static float cpSplitTimes[NUM_CHECKPOINTS] = {0};
+static int cpNextIdx = 0;
+static float cpFlashTimer = 0.0f;
+
 void GenerateTrack(void) {
     // Winding rally course with varied curvature and gentle height.
     for (int i = 0; i < TRACK_SEGS; i++) {
@@ -537,6 +545,25 @@ void DrawTrack(void) {
         DrawTriangle3D(a, b2, b, chk);
         DrawTriangle3D(a, a2, b2, chk);
     }
+}
+
+void DrawCheckpoint(int seg, int idx) {
+    Vector3 p = trackPts[seg];
+    Vector3 n = trackNormals[seg];
+    float hw = TRACK_WIDTH / 2.0f + 0.3f;
+    Vector3 L = Vector3Add(p, Vector3Scale(n, -hw));
+    Vector3 R = Vector3Add(p, Vector3Scale(n,  hw));
+    float postH = 5.0f;
+    // Two orange/white striped posts.
+    Color post = (idx == cpNextIdx) ? (Color){255, 160, 50, 255} : (Color){200, 200, 200, 255};
+    DrawCylinderEx(L, (Vector3){L.x, L.y + postH, L.z}, 0.18f, 0.14f, 8, post);
+    DrawCylinderEx(R, (Vector3){R.x, R.y + postH, R.z}, 0.18f, 0.14f, 8, post);
+    // Banner spanning the top.
+    float spanW = Vector3Distance(L, R);
+    float banRot = atan2f(R.x - L.x, R.z - L.z);
+    Vector3 banCenter = { (L.x + R.x) * 0.5f, L.y + postH - 0.45f, (L.z + R.z) * 0.5f };
+    Color ban = (idx == cpNextIdx) ? (Color){255, 120, 40, 255} : (Color){80, 80, 110, 255};
+    DrawCubeRotY(banCenter, spanW, 0.85f, 0.2f, banRot, ban);
 }
 
 void DrawFan(const Fan *f, float t) {
@@ -1006,6 +1033,15 @@ moveCar:;
                 car->hasPrevWheels = false;
             }
 
+            // Checkpoint crossing (player only): arm the next checkpoint
+            // and record a split when the expected segment is entered.
+            if (car->isPlayer && car->currentSeg != car->prevSeg
+                && car->currentSeg == CHECKPOINT_SEGS[cpNextIdx]) {
+                cpSplitTimes[cpNextIdx] = lapTimer;
+                cpNextIdx = (cpNextIdx + 1) % NUM_CHECKPOINTS;
+                cpFlashTimer = 1.2f;
+            }
+
             // Track boundary: only push when the car is actually past the edge.
             // The previous implementation triggered at (edgeDist - 3), i.e. the
             // inner 40% of the track, so it was constantly nudging the car
@@ -1257,6 +1293,9 @@ moveCar:;
             // Cheering fans — bob in time with raceTimer
             for (int i = 0; i < numFans; i++) DrawFan(&fans[i], raceTimer);
 
+            // Checkpoint gates
+            for (int i = 0; i < NUM_CHECKPOINTS; i++) DrawCheckpoint(CHECKPOINT_SEGS[i], i);
+
             // Puddles (flat blue discs flush with the road)
             for (int i = 0; i < numPuddles; i++) {
                 Vector3 a = puddles[i].pos;
@@ -1351,6 +1390,18 @@ moveCar:;
             Color driftCol = (cars[0].driftTime > 1.5f) ? ORANGE : YELLOW;
             int dw = MeasureText("DRIFT!", 56);
             ArcTextOutlined("DRIFT!", sw / 2 - dw / 2, 20, 56, driftCol, BLACK);
+        }
+
+        // Checkpoint flash (shows the split just banked)
+        if (cpFlashTimer > 0.0f) {
+            cpFlashTimer -= dt;
+            int prevIdx = (cpNextIdx + NUM_CHECKPOINTS - 1) % NUM_CHECKPOINTS;
+            float alpha = cpFlashTimer / 1.2f;
+            if (alpha > 1.0f) alpha = 1.0f;
+            Color c = (Color){255, 200, 80, (unsigned char)(alpha * 255)};
+            const char *cp = TextFormat("CP %d   %.2f", prevIdx + 1, cpSplitTimes[prevIdx]);
+            int w = MeasureText(cp, 40);
+            ArcTextOutlined(cp, sw / 2 - w / 2, 100, 40, c, (Color){0,0,0,(unsigned char)(alpha*200)});
         }
 
         // Mini-map (bottom-right, auto-fit to track bounds)
