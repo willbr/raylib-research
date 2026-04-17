@@ -1395,8 +1395,10 @@ moveCar:;
         // Checkpoint flash (shows the split just banked)
         if (cpFlashTimer > 0.0f) {
             cpFlashTimer -= dt;
+            if (cpFlashTimer < 0.0f) cpFlashTimer = 0.0f;
             int prevIdx = (cpNextIdx + NUM_CHECKPOINTS - 1) % NUM_CHECKPOINTS;
             float alpha = cpFlashTimer / 1.2f;
+            if (alpha < 0.0f) alpha = 0.0f;
             if (alpha > 1.0f) alpha = 1.0f;
             Color c = (Color){255, 200, 80, (unsigned char)(alpha * 255)};
             const char *cp = TextFormat("CP %d   %.2f", prevIdx + 1, cpSplitTimes[prevIdx]);
