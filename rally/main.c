@@ -9,8 +9,8 @@
 
 #define TRACK_SEGS    64
 #define TRACK_WIDTH   14.0f
-#define BANK_WIDTH     6.0f  // horizontal reach of the grassy bank beyond each edge
-#define BANK_HEIGHT    1.8f  // vertical rise of the bank at its outer lip
+#define BANK_WIDTH     5.0f  // horizontal reach of the grassy bank beyond each edge
+#define BANK_HEIGHT    0.4f  // vertical rise of the bank at its outer lip (just a shoulder)
 #define NUM_CARS       4
 #define TOTAL_LAPS     3
 #define MAX_DUST      80
