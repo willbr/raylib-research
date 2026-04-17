@@ -38,7 +38,6 @@ typedef struct {
     bool finished;
     bool drifting;
     float driftTime;
-    float boostTimer;
     Color color;
     float aiNoise;
     float steerInput;
@@ -378,12 +377,6 @@ void DrawCar(Car *car, int colorIdx) {
         if (GetRandomValue(0, 1) == 0) SpawnDust(rearPos, dustCol);
     }
 
-    // Boost flame
-    if (car->boostTimer > 0) {
-        float cs = cosf(car->rotation), sn = sinf(car->rotation);
-        Vector3 exhaust = { car->pos.x - sn * 1.0f, car->pos.y + 0.2f, car->pos.z + cs * 1.0f };
-        DrawSphere(exhaust, 0.12f, ORANGE);
-    }
 }
 
 int main(void) {
@@ -409,7 +402,6 @@ int main(void) {
         cars[i].finished = false;
         cars[i].drifting = false;
         cars[i].driftTime = 0;
-        cars[i].boostTimer = 0;
         cars[i].color = carColors[i];
         cars[i].aiNoise = (float)GetRandomValue(-20, 20) / 100.0f;
         cars[i].steerInput = 0;
@@ -453,8 +445,6 @@ int main(void) {
                 case SURF_MUD:    drag = CAR_DRAG_MUD; maxSpd *= 0.9f; surfTurnMult = 1.8f; break;
             }
 
-            if (car->boostTimer > 0) { car->boostTimer -= dt; maxSpd *= 1.3f; }
-
             if (!raceStarted) goto moveCar;
 
             if (car->isPlayer) {
@@ -471,10 +461,6 @@ int main(void) {
                     steer *= CAR_DRIFT_MULT;
                     drag = CAR_DRIFT_DRAG;
                 } else {
-                    // Mini-turbo on drift release
-                    if (car->drifting && car->driftTime > 0.8f) {
-                        car->boostTimer = (car->driftTime > 2.0f) ? 1.2f : 0.6f;
-                    }
                     car->drifting = false;
                     car->driftTime = 0;
                 }
@@ -724,17 +710,11 @@ moveCar:;
             ArcTextMono(bestNumTxt, sw - bestNumW - 30,              228, 24, YELLOW);
         }
 
-        // Drift/boost (top-center, flashy)
+        // Drift indicator (top-center)
         if (cars[0].drifting) {
             Color driftCol = (cars[0].driftTime > 1.5f) ? ORANGE : YELLOW;
             int dw = MeasureText("DRIFT!", 56);
             ArcTextOutlined("DRIFT!", sw / 2 - dw / 2, 20, 56, driftCol, BLACK);
-        }
-        if (cars[0].boostTimer > 0) {
-            // Flash: alternate red/yellow ~8 times per second
-            Color bc = ((int)(raceTimer * 8) & 1) ? RED : YELLOW;
-            int bw = MeasureText("BOOST!", 56);
-            ArcTextOutlined("BOOST!", sw / 2 - bw / 2, 20, 56, bc, BLACK);
         }
 
         // Mini-map (bottom-right, auto-fit to track bounds)
@@ -822,7 +802,7 @@ moveCar:;
         }
 
         // Help text and FPS (more visible)
-        ArcText("WASD: DRIVE   SHIFT/CTRL+TURN: DRIFT   RELEASE FOR BOOST",
+        ArcText("WASD: DRIVE   SHIFT/CTRL+TURN: DRIFT",
                 20, sh - 22, 16, (Color){140, 140, 170, 230});
         // FPS also mono so the counter doesn't shimmy.
         {
