@@ -39,6 +39,8 @@ typedef struct {
     float rampCooldown; // seconds until another ramp launch is allowed
     float visRoll;   // visual lean into corners (radians, cosmetic)
     float visPitch;  // visual nose-up/down tilt (radians, cosmetic)
+    float visRollVel;   // angular velocity of visRoll (spring state)
+    float visPitchVel;  // angular velocity of visPitch (spring state)
     Vector3 prevRearL, prevRearR; // previous rear-wheel world positions (for skid marks)
     bool hasPrevWheels;
     int lap;
@@ -870,6 +872,8 @@ int main(void) {
         cars[i].rampCooldown = 0;
         cars[i].visRoll = 0;
         cars[i].visPitch = 0;
+        cars[i].visRollVel = 0;
+        cars[i].visPitchVel = 0;
         cars[i].hasPrevWheels = false;
         cars[i].isPlayer = (i == 0);
         cars[i].finished = false;
@@ -1085,6 +1089,10 @@ moveCar:;
                     car->pos.y += car->velY * dt;
                     if (car->pos.y <= targetY) {
                         car->pos.y = targetY;
+                        // Landing kick: spring-load the suspension pitch so
+                        // the nose dips on impact and then bounces back.
+                        // velY here is the downward impact velocity (negative).
+                        car->visPitchVel -= car->velY * 0.055f;
                         car->velY = 0.0f;
                         car->airborne = false;
                     }
@@ -1112,35 +1120,55 @@ moveCar:;
                 }
             }
 
-            // --- Visual lean / tilt (cosmetic, does not affect physics) ---
+            // --- Suspension-style visual tilt (does not affect physics) ---
+            // Underdamped springs drive visRoll/visPitch toward an input-
+            // based target, so you get a little body bob after landings,
+            // brake dive, and accel squat without a full rigid-body sim.
             {
                 float steerMag  = car->steerInput / CAR_TURN;
-                float speedFrac = fabsf(car->speed) / CAR_MAX_SPEED;
-                // Subtle body lean — a real rally car rolls maybe 3–5° in a
-                // hard corner. 0.22 rad at 1.8× drift mult was ~22°, enough
-                // that the inside wheels lifted off the road visually.
-                float targetRoll = -steerMag * speedFrac * 0.08f;
+                float speedAbs  = fabsf(car->speed);
+                float speedFrac = speedAbs / CAR_MAX_SPEED;
+
+                // Roll gated by a smooth low-speed fade so standing-still
+                // steering doesn't rock the body.
+                float speedGate = (speedAbs - 1.0f) / 3.0f;
+                if (speedGate < 0.0f) speedGate = 0.0f;
+                if (speedGate > 1.0f) speedGate = 1.0f;
+                float targetRoll = -steerMag * speedFrac * 0.08f * speedGate;
                 if (car->drifting)  targetRoll *= 1.4f;
                 if (car->airborne)  targetRoll *= 0.3f;
 
+                // Pitch target = road slope (grounded) or velY (airborne),
+                // plus a weight-transfer offset from throttle/brake input.
                 float targetPitch = 0.0f;
                 if (car->airborne) {
                     float v = car->velY;
                     if (v >  15.0f) v =  15.0f;
                     if (v < -15.0f) v = -15.0f;
-                    targetPitch = -v * 0.025f;  // nose up while rising
+                    targetPitch = -v * 0.025f;
                 } else {
                     int next = (car->currentSeg + 1) % TRACK_SEGS;
                     float dx = XZDistance(trackPts[next], trackPts[car->currentSeg]);
                     float dy = trackPts[next].y - trackPts[car->currentSeg].y;
                     if (dx > 0.001f) targetPitch = -atan2f(dy, dx);
+                    // Weight transfer: throttle (accel > 0) squats the rear
+                    // and lifts the nose (negative pitch); brake (accel < 0)
+                    // dives the nose (positive pitch). Only applied on the
+                    // ground where the weight can actually transfer.
+                    targetPitch -= accel * 0.0035f;
                 }
 
-                // Exponential-style smoothing so motion reads dynamic but stays framerate-safe.
-                float rRate = 1.0f - expf(-10.0f * dt);
-                float pRate = 1.0f - expf(-6.0f  * dt);
-                car->visRoll  += (targetRoll  - car->visRoll)  * rRate;
-                car->visPitch += (targetPitch - car->visPitch) * pRate;
+                // Underdamped spring integration. ~5 Hz natural frequency
+                // for roll, a touch slower for pitch, damping ratio ~0.55
+                // so the body settles with a single small overshoot.
+                float rollK = 420.0f, rollD = 22.0f;
+                float pitchK = 260.0f, pitchD = 17.0f;
+                car->visRollVel  += ((targetRoll  - car->visRoll)  * rollK
+                                   - car->visRollVel  * rollD) * dt;
+                car->visPitchVel += ((targetPitch - car->visPitch) * pitchK
+                                   - car->visPitchVel * pitchD) * dt;
+                car->visRoll  += car->visRollVel  * dt;
+                car->visPitch += car->visPitchVel * dt;
             }
 
             // --- Skid marks: spawn rear-wheel streaks while drifting on ground. ---
