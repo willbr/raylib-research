@@ -36,6 +36,8 @@ typedef struct {
     float rampCooldown; // seconds until another ramp launch is allowed
     float visRoll;   // visual lean into corners (radians, cosmetic)
     float visPitch;  // visual nose-up/down tilt (radians, cosmetic)
+    Vector3 prevRearL, prevRearR; // previous rear-wheel world positions (for skid marks)
+    bool hasPrevWheels;
     int lap;
     int nextWP;
     int currentSeg;  // cached nearest segment
@@ -48,6 +50,12 @@ typedef struct {
     float aiNoise;
     float steerInput;
 } Car;
+
+// --- Skid marks (ring buffer) ---
+#define MAX_SKIDS 512
+typedef struct { Vector3 a, b; bool active; } Skid;
+static Skid skids[MAX_SKIDS];
+static int skidIdx = 0;
 
 #define RALLY_GRAVITY 35.0f
 
@@ -477,6 +485,7 @@ int main(void) {
         cars[i].rampCooldown = 0;
         cars[i].visRoll = 0;
         cars[i].visPitch = 0;
+        cars[i].hasPrevWheels = false;
         cars[i].isPlayer = (i == 0);
         cars[i].finished = false;
         cars[i].drifting = false;
@@ -532,8 +541,9 @@ int main(void) {
                 if (IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A))  steer = CAR_TURN;
                 if (IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D)) steer = -CAR_TURN;
 
-                // Drift
-                bool driftInput = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_LEFT_CONTROL);
+                // Space = brake + handbrake drift combined.
+                bool driftInput = IsKeyDown(KEY_SPACE);
+                if (driftInput) accel = -CAR_BRAKE;
                 if (driftInput && fabsf(steer) > 0.1f && car->speed > 15.0f) {
                     car->drifting = true;
                     car->driftTime += dt;
@@ -670,6 +680,30 @@ moveCar:;
                 car->visPitch += (targetPitch - car->visPitch) * pRate;
             }
 
+            // --- Skid marks: spawn rear-wheel streaks while drifting on ground. ---
+            if (car->drifting && !car->airborne && fabsf(car->speed) > 5.0f) {
+                // Rear-wheel body offsets (matches carBody RL / RR parts).
+                // Y = car->pos.y - 0.18 puts the streak flush on the road
+                // (car->pos.y = track+0.2, so track+0.02 = car->pos.y-0.18).
+                Vector3 lBody = { -0.45f, 0, -0.7f };
+                Vector3 rBody = {  0.45f, 0, -0.7f };
+                Vector3 lWorld = Vector3Add(car->pos, RotateY(lBody, -car->rotation));
+                Vector3 rWorld = Vector3Add(car->pos, RotateY(rBody, -car->rotation));
+                lWorld.y = car->pos.y - 0.18f;
+                rWorld.y = car->pos.y - 0.18f;
+                if (car->hasPrevWheels) {
+                    skids[skidIdx] = (Skid){ car->prevRearL, lWorld, true };
+                    skidIdx = (skidIdx + 1) % MAX_SKIDS;
+                    skids[skidIdx] = (Skid){ car->prevRearR, rWorld, true };
+                    skidIdx = (skidIdx + 1) % MAX_SKIDS;
+                }
+                car->prevRearL = lWorld;
+                car->prevRearR = rWorld;
+                car->hasPrevWheels = true;
+            } else {
+                car->hasPrevWheels = false;
+            }
+
             // Track boundary: only push when the car is actually past the edge.
             // The previous implementation triggered at (edgeDist - 3), i.e. the
             // inner 40% of the track, so it was constantly nudging the car
@@ -780,6 +814,26 @@ moveCar:;
             DrawPlane((Vector3){0, -0.02f, 0}, (Vector2){500, 500}, (Color){60, 100, 40, 255});
 
             DrawTrack();
+
+            // Skid marks (on the road, below cars/particles so they read as decals)
+            for (int i = 0; i < MAX_SKIDS; i++) {
+                if (!skids[i].active) continue;
+                Vector3 a = skids[i].a, b = skids[i].b;
+                Vector3 dir = Vector3Subtract(b, a);
+                dir.y = 0;
+                float len = sqrtf(dir.x * dir.x + dir.z * dir.z);
+                if (len < 0.001f) continue;
+                Vector3 perp = { -dir.z / len * 0.12f, 0, dir.x / len * 0.12f };
+                Vector3 p1 = Vector3Subtract(a, perp);
+                Vector3 p2 = Vector3Add(a, perp);
+                Vector3 p3 = Vector3Add(b, perp);
+                Vector3 p4 = Vector3Subtract(b, perp);
+                Color sc = (Color){ 20, 20, 20, 200 };
+                DrawTriangle3D(p1, p2, p3, sc);
+                DrawTriangle3D(p1, p3, p4, sc);
+                DrawTriangle3D(p1, p3, p2, sc);
+                DrawTriangle3D(p1, p4, p3, sc);
+            }
 
             // Trees
             for (int i = 0; i < numTrees; i++) DrawTree(treePosns[i], treeSizes[i]);
@@ -952,7 +1006,7 @@ moveCar:;
         }
 
         // Help text and FPS (more visible)
-        ArcText("WASD: DRIVE   SHIFT/CTRL+TURN: DRIFT",
+        ArcText("WASD: DRIVE   SPACE+TURN: BRAKE / DRIFT",
                 20, sh - 22, 16, (Color){140, 140, 170, 230});
         // FPS also mono so the counter doesn't shimmy.
         {
