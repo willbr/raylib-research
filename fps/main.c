@@ -1,6 +1,12 @@
 #include "raylib.h"
 #include "raymath.h"
 #include "../common/objects3d.h"
+#include "../common/util/math.h"
+#include "../common/util/input.h"
+#include "../common/util/pool.h"
+#include "../common/util/camera.h"
+#include "../common/util/collide.h"
+#include "../common/util/hud.h"
 #include <math.h>
 #include <stdlib.h>
 
@@ -306,6 +312,11 @@ bool WallCollision(Vector3 pos, float radius) {
     return false;
 }
 
+static bool FpsBlocked(Vector3 pos, float radius, void *user) {
+    (void)user;
+    return WallCollision(pos, radius) || PropCollision(pos, radius);
+}
+
 void SpawnPickup(Vector3 pos, PickupType type) {
     for (int i = 0; i < MAX_PICKUPS; i++) {
         if (pickups[i].active) continue;
@@ -369,8 +380,8 @@ void FireWeapon(Player *p, Vector3 forward, Vector3 right) {
     ShakeTrigger(&shake, 0.1f + (p->weapon == 1 ? 0.2f : 0));
 
     for (int pellet = 0; pellet < w->pellets; pellet++) {
-        for (int i = 0; i < MAX_BULLETS; i++) {
-            if (bullets[i].active) continue;
+        int i = POOL_SPAWN(bullets, MAX_BULLETS);
+        if (i >= 0) {
             Vector3 dir = forward;
             dir.x += (float)GetRandomValue(-100, 100) / 100.0f * w->spread;
             dir.y += (float)GetRandomValue(-100, 100) / 100.0f * w->spread;
@@ -381,7 +392,6 @@ void FireWeapon(Player *p, Vector3 forward, Vector3 right) {
                 .vel = Vector3Scale(dir, w->bulletSpeed),
                 .life = 2.0f, .damage = w->damage, .active = true
             };
-            break;
         }
     }
     // Auto-reload
@@ -397,10 +407,7 @@ int main(void) {
 
     InitGame();
 
-    Camera3D camera = {0};
-    camera.fovy = 75.0f;
-    camera.projection = CAMERA_PERSPECTIVE;
-    camera.up = (Vector3){0, 1, 0};
+    CamFPS camRig = CamFPSInit((Vector3){0, 1.5f, 0});
 
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
@@ -412,30 +419,14 @@ int main(void) {
             if (IsKeyPressed(KEY_ENTER)) { InitGame(); DisableCursor(); }
         } else {
             // --- Mouse look ---
-            Vector2 md = GetMouseDelta();
-            player.yaw -= md.x * 0.1f;
-            player.pitch += md.y * 0.1f;
-            if (player.pitch > 89) player.pitch = 89;
-            if (player.pitch < -89) player.pitch = -89;
-
-            float yr = player.yaw * DEG2RAD, pr = player.pitch * DEG2RAD;
-            Vector3 forward = Vector3Normalize((Vector3){sinf(yr), -tanf(pr), cosf(yr)});
-            Vector3 flatFwd = Vector3Normalize((Vector3){sinf(yr), 0, cosf(yr)});
-            Vector3 right = Vector3Normalize(Vector3CrossProduct(forward, (Vector3){0,1,0}));
+            InputLookMouse(&player.yaw, &player.pitch, 0.002f, 1.55f);
 
             // --- Movement ---
             float speed = 10.0f * dt;
-            Vector3 move = {0};
-            if (IsKeyDown(KEY_W)) move = Vector3Add(move, Vector3Scale(flatFwd, speed));
-            if (IsKeyDown(KEY_S)) move = Vector3Add(move, Vector3Scale(flatFwd, -speed));
-            if (IsKeyDown(KEY_A)) move = Vector3Add(move, Vector3Scale(right, -speed));
-            if (IsKeyDown(KEY_D)) move = Vector3Add(move, Vector3Scale(right, speed));
+            Vector3 move = Vector3Scale(InputMoveDir3Flat(player.yaw), speed);
 
             // Try move with wall collision
-            Vector3 newPos = Vector3Add(player.pos, (Vector3){move.x, 0, 0});
-            if (!WallCollision(newPos, 0.4f) && !PropCollision(newPos, 0.4f)) player.pos.x = newPos.x;
-            newPos = Vector3Add(player.pos, (Vector3){0, 0, move.z});
-            if (!WallCollision(newPos, 0.4f) && !PropCollision(newPos, 0.4f)) player.pos.z = newPos.z;
+            SlideXZ(&player.pos, move, 0.4f, FpsBlocked, NULL);
 
             // Clamp to arena
             float hs = MAP_SIZE/2 - 0.5f;
@@ -447,9 +438,7 @@ int main(void) {
                 player.velY = 8.0f;
                 player.grounded = false;
             }
-            player.velY -= 20.0f * dt;
-            player.pos.y += player.velY * dt;
-            if (player.pos.y <= 0) { player.pos.y = 0; player.velY = 0; player.grounded = true; }
+            GroundSnap(&player.pos, &player.velY, dt, 20.0f, 0.0f, &player.grounded);
 
             // --- Weapon switch ---
             if (IsKeyPressed(KEY_ONE)) { player.weapon = 0; player.ammo = weapons[0].maxAmmo; player.reloading = false; }
@@ -471,58 +460,60 @@ int main(void) {
 
             // Shoot
             player.fireTimer -= dt;
-            if (IsMouseButtonDown(MOUSE_LEFT_BUTTON) && player.fireTimer <= 0 && !player.reloading)
-                FireWeapon(&player, forward, right);
+            if (IsMouseButtonDown(MOUSE_LEFT_BUTTON) && player.fireTimer <= 0 && !player.reloading) {
+                // Derive aim vectors from current yaw/pitch
+                float cy = cosf(player.yaw), sy = sinf(player.yaw);
+                float cp = cosf(player.pitch), sp = sinf(player.pitch);
+                Vector3 aimFwd = (Vector3){ sy * cp, sp, -cy * cp };
+                Vector3 aimRight = Vector3Normalize(Vector3CrossProduct(aimFwd, (Vector3){0,1,0}));
+                FireWeapon(&player, aimFwd, aimRight);
+            }
 
             // --- Update bullets ---
-            for (int i = 0; i < MAX_BULLETS; i++) {
-                if (!bullets[i].active) continue;
-                bullets[i].pos = Vector3Add(bullets[i].pos, Vector3Scale(bullets[i].vel, dt));
-                bullets[i].life -= dt;
-                if (bullets[i].life <= 0 || WallCollision(bullets[i].pos, 0.05f)) {
-                    if (bullets[i].active) {
-                        SpawnParticleBurst(particles, MAX_PARTICLES, bullets[i].pos, 3, 1, 3, 0.1f, 0.3f, 0.02f, 0.08f);
-                        if (WallCollision(bullets[i].pos, 0.05f)) {
-                            // Determine wall normal (approximate from velocity)
-                            Vector3 n = Vector3Normalize(Vector3Negate(bullets[i].vel));
-                            SpawnDecal(bullets[i].pos, n);
-                        }
+            POOL_FOREACH(bullets, MAX_BULLETS, b) {
+                if (!b->active) continue;
+                b->pos = Vector3Add(b->pos, Vector3Scale(b->vel, dt));
+                b->life -= dt;
+                if (b->life <= 0 || WallCollision(b->pos, 0.05f)) {
+                    SpawnParticleBurst(particles, MAX_PARTICLES, b->pos, 3, 1, 3, 0.1f, 0.3f, 0.02f, 0.08f);
+                    if (WallCollision(b->pos, 0.05f)) {
+                        Vector3 n = Vector3Normalize(Vector3Negate(b->vel));
+                        SpawnDecal(b->pos, n);
                     }
-                    bullets[i].active = false;
+                    b->active = false;
                     continue;
                 }
                 // Hit enemies
-                for (int e = 0; e < MAX_ENEMIES; e++) {
-                    if (!enemies[e].active) continue;
-                    if (Vector3Distance(bullets[i].pos, enemies[e].pos) < 0.8f) {
-                        enemies[e].hp -= bullets[i].damage;
-                        enemies[e].hitFlash = 0.1f;
-                        SpawnParticleBurst(particles, MAX_PARTICLES, bullets[i].pos, 4, 2, 5, 0.2f, 0.5f, 0.03f, 0.1f);
-                        bullets[i].active = false;
-                        if (enemies[e].hp <= 0) {
-                            enemies[e].active = false;
+                POOL_FOREACH(enemies, MAX_ENEMIES, e) {
+                    if (!e->active) continue;
+                    if (Vector3Distance(b->pos, e->pos) < 0.8f) {
+                        e->hp -= b->damage;
+                        e->hitFlash = 0.1f;
+                        SpawnParticleBurst(particles, MAX_PARTICLES, b->pos, 4, 2, 5, 0.2f, 0.5f, 0.03f, 0.1f);
+                        b->active = false;
+                        if (e->hp <= 0) {
+                            e->active = false;
                             enemiesAlive--;
                             player.kills++;
-                            SpawnParticleBurst(particles, MAX_PARTICLES, enemies[e].pos, 12, 2, 8, 0.3f, 1.0f, 0.05f, 0.2f);
+                            SpawnParticleBurst(particles, MAX_PARTICLES, e->pos, 12, 2, 8, 0.3f, 1.0f, 0.05f, 0.2f);
                             ShakeTrigger(&shake, 0.15f);
                         }
                         break;
                     }
                 }
                 // Hit props
-                if (bullets[i].active) {
+                if (b->active) {
                     for (int p = 0; p < numProps; p++) {
                         if (!props[p].active) continue;
                         float hitR = (props[p].type == PROP_BARREL) ? 0.5f : 0.6f;
-                        if (Vector3Distance(bullets[i].pos, (Vector3){props[p].pos.x, props[p].pos.y + 0.5f, props[p].pos.z}) < hitR) {
-                            props[p].hp -= bullets[i].damage;
-                            SpawnParticleBurst(particles, MAX_PARTICLES, bullets[i].pos, 3, 1, 4, 0.1f, 0.4f, 0.02f, 0.08f);
-                            bullets[i].active = false;
+                        if (Vector3Distance(b->pos, (Vector3){props[p].pos.x, props[p].pos.y + 0.5f, props[p].pos.z}) < hitR) {
+                            props[p].hp -= b->damage;
+                            SpawnParticleBurst(particles, MAX_PARTICLES, b->pos, 3, 1, 4, 0.1f, 0.4f, 0.02f, 0.08f);
+                            b->active = false;
                             if (props[p].hp <= 0) {
                                 props[p].active = false;
                                 SpawnParticleBurst(particles, MAX_PARTICLES, props[p].pos, 10, 3, 8, 0.3f, 0.8f, 0.05f, 0.2f);
                                 ShakeTrigger(&shake, 0.1f);
-                                // Barrels drop a random pickup
                                 if (props[p].type == PROP_BARREL) {
                                     PickupType pt = (PickupType)GetRandomValue(0, 2);
                                     SpawnPickup((Vector3){props[p].pos.x, 0.5f, props[p].pos.z}, pt);
@@ -602,10 +593,14 @@ int main(void) {
         Vector2 shakeOff = ShakeOffset(&shake);
 
         // --- Camera ---
-        camera.position = (Vector3){player.pos.x + shakeOff.x, player.pos.y + 1.6f + shakeOff.y, player.pos.z};
-        float yr = player.yaw * DEG2RAD, pr = player.pitch * DEG2RAD;
-        Vector3 forward = Vector3Normalize((Vector3){sinf(yr), -tanf(pr), cosf(yr)});
-        camera.target = Vector3Add(camera.position, forward);
+        camRig.pos   = (Vector3){ player.pos.x, player.pos.y + 1.5f, player.pos.z };
+        camRig.yaw   = player.yaw;
+        camRig.pitch = player.pitch;
+        Camera3D camera = CamFPSToCamera3D(&camRig);
+        camera.position = Vector3Add(camera.position, (Vector3){ shakeOff.x, shakeOff.y, 0 });
+        camera.target   = Vector3Add(camera.target,   (Vector3){ shakeOff.x, shakeOff.y, 0 });
+        // Derive forward/right vectors for gun rendering
+        Vector3 forward = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
 
         // --- Draw ---
         BeginDrawing();
@@ -645,27 +640,26 @@ int main(void) {
         }
 
         // Enemies
-        for (int e = 0; e < MAX_ENEMIES; e++) {
-            if (!enemies[e].active) continue;
+        POOL_FOREACH(enemies, MAX_ENEMIES, en) {
+            if (!en->active) continue;
             Part *ep; int ec;
-            switch (enemies[e].type) {
+            switch (en->type) {
                 case EN_GRUNT: ep = gruntParts; ec = sizeof(gruntParts)/sizeof(Part); break;
                 case EN_FAST:  ep = fastParts;  ec = sizeof(fastParts)/sizeof(Part); break;
                 case EN_TANK:  ep = tankParts;  ec = sizeof(tankParts)/sizeof(Part); break;
             }
-            float rotY = atan2f(player.pos.x - enemies[e].pos.x, player.pos.z - enemies[e].pos.z);
-            // Flash white when hit
-            if (enemies[e].hitFlash > 0) {
-                DrawCube(enemies[e].pos, 0.8f, 1.2f, 0.5f, WHITE);
+            float rotY = atan2f(player.pos.x - en->pos.x, player.pos.z - en->pos.z);
+            if (en->hitFlash > 0) {
+                DrawCube(en->pos, 0.8f, 1.2f, 0.5f, WHITE);
             } else {
-                Object3D obj = {ep, ec, enemies[e].pos, rotY};
+                Object3D obj = {ep, ec, en->pos, rotY};
                 DrawObject3D(&obj);
             }
             // HP bar
-            if (enemies[e].hp < enemies[e].maxHp) {
-                Vector2 sp = GetWorldToScreen((Vector3){enemies[e].pos.x, 2.0f, enemies[e].pos.z}, camera);
+            if (en->hp < en->maxHp) {
+                Vector2 sp = GetWorldToScreen((Vector3){en->pos.x, 2.0f, en->pos.z}, camera);
                 if (sp.y > 0 && sp.y < sh) {
-                    float pct = enemies[e].hp / enemies[e].maxHp;
+                    float pct = en->hp / en->maxHp;
                     DrawRectangle(sp.x-15, sp.y, 30, 4, (Color){40,40,40,200});
                     Color hc = pct > 0.5f ? (Color){50,200,80,255} : (Color){220,40,40,255};
                     DrawRectangle(sp.x-15, sp.y, (int)(30*pct), 4, hc);
@@ -674,9 +668,9 @@ int main(void) {
         }
 
         // Bullets
-        for (int i = 0; i < MAX_BULLETS; i++) {
-            if (!bullets[i].active) continue;
-            DrawSphere(bullets[i].pos, 0.06f, YELLOW);
+        POOL_FOREACH(bullets, MAX_BULLETS, b) {
+            if (!b->active) continue;
+            DrawSphere(b->pos, 0.06f, YELLOW);
         }
 
         // Pickups
@@ -825,19 +819,13 @@ int main(void) {
 
         // --- HUD ---
         // Crosshair
-        int cx = sw/2, cy = sh/2;
         int crossSize = 8 + (player.weapon == 1 ? 4 : 0);
-        DrawLine(cx-crossSize, cy, cx-4, cy, WHITE);
-        DrawLine(cx+4, cy, cx+crossSize, cy, WHITE);
-        DrawLine(cx, cy-crossSize, cx, cy-4, WHITE);
-        DrawLine(cx, cy+4, cx, cy+crossSize, WHITE);
+        HudCrosshair(sw / 2, sh / 2, crossSize, 4, 0, WHITE);
 
         // HP bar
-        DrawRectangle(20, sh-50, 200, 20, (Color){30,30,30,200});
         float hpPct = player.hp / player.maxHp;
         Color hpCol = hpPct > 0.5f ? (Color){50,200,80,255} : hpPct > 0.25f ? (Color){240,200,40,255} : (Color){220,40,40,255};
-        DrawRectangle(20, sh-50, (int)(200*hpPct), 20, hpCol);
-        DrawRectangleLines(20, sh-50, 200, 20, (Color){80,80,80,255});
+        HudHealthBar(20, sh - 50, 200, 20, hpPct, hpCol, (Color){30,30,30,200}, (Color){80,80,80,255});
         DrawText(TextFormat("HP: %.0f", player.hp), 25, sh-48, 16, WHITE);
 
         // Armor bar
@@ -863,8 +851,7 @@ int main(void) {
         DrawText("[1] Pistol  [2] Shotgun  [3] Rifle  [R] Reload", 20, sh-20, 12, (Color){100,100,100,255});
 
         // Damage flash
-        if (player.damageFlash > 0)
-            DrawRectangle(0, 0, sw, sh, (Color){200, 30, 30, (unsigned char)(player.damageFlash * 400)});
+        HudDamageVignette(player.damageFlash * (400.0f / 255.0f), (Color){200, 30, 30, 255});
 
         // Game over
         if (gameOver) {
