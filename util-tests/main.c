@@ -24,6 +24,7 @@
 #include "../common/util/input.h"
 #include "../common/util/hud.h"
 #include "../common/util/debug.h"
+#include "../common/util/vehicle.h"
 
 static int g_fails = 0;
 
@@ -296,6 +297,7 @@ static void test_fx(void) {
     Vector2 off = ShakeOffset(&sh);
     CHECK(off.x == 0.0f && off.y == 0.0f, "ShakeOffset zero when done");
 }
+static void test_vehicle(void){/* filled in Task 2 */ }
 
 int main(void) {
     test_math();
@@ -303,6 +305,7 @@ int main(void) {
     test_collide();
     test_camera();
     test_fx();
+    test_vehicle();
     // input/hud/debug: include-only, no standalone tests (window-dependent)
     printf("\n%s (%d failure%s)\n", g_fails ? "FAILED" : "ALL PASSED",
            g_fails, g_fails == 1 ? "" : "s");
