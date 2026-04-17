@@ -424,8 +424,10 @@ void DrawCar(Car *car, int colorIdx) {
     Color darker = { car->color.r*3/4, car->color.g*3/4, car->color.b*3/4, 255 };
     tinted[1].color = darker;                         // cabin
 
+    // Yaw passes in physics convention (CW from above) — RotateVec3D's yaw
+    // matches that, unlike the Y-only RotateY used by DrawPart.
     DrawObject3DRotated(tinted, carBodyCount, car->pos,
-                        car->visPitch, -car->rotation, car->visRoll);
+                        car->visPitch, car->rotation, car->visRoll);
 
     // Shadow (sits just below the car on the track surface)
     DrawCircle3D((Vector3){car->pos.x, car->pos.y - 0.19f, car->pos.z}, 1.0f,
