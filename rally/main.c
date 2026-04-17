@@ -203,7 +203,25 @@ void SpawnDust(Vector3 pos, Color col) {
     dustIdx = (dustIdx + 1) % MAX_DUST;
 }
 
-float CarProgress(Car *c) { return (float)c->lap * TRACK_SEGS + (float)c->nextWP; }
+// Continuous progress: completed segments + fraction along the current one.
+// Using integer waypoints alone caused rank to flicker between cars on the
+// same segment — whoever hit the next waypoint first popped ahead by a
+// whole unit until the other caught up.
+float CarProgress(Car *c) {
+    int next = c->nextWP;
+    int prev = (next + TRACK_SEGS - 1) % TRACK_SEGS;
+    Vector3 segVec = Vector3Subtract(trackPts[next], trackPts[prev]);
+    float segLen2 = Vector3DotProduct(segVec, segVec);
+    float frac = 0.0f;
+    if (segLen2 > 1e-6f) {
+        Vector3 toCar = Vector3Subtract(c->pos, trackPts[prev]);
+        frac = Clamp(Vector3DotProduct(toCar, segVec) / segLen2, 0.0f, 1.0f);
+    }
+    // When nextWP wraps to 0 the lap counter has already incremented —
+    // back it out so progress stays monotonic across the start line.
+    int lap = (next == 0) ? (c->lap - 1) : c->lap;
+    return (float)lap * TRACK_SEGS + (float)prev + frac;
+}
 
 void DrawTrack(void) {
     for (int i = 0; i < TRACK_SEGS; i++) {
