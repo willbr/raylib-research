@@ -283,6 +283,28 @@ void DrawTree(Vector3 pos, float size) {
     }
 }
 
+// --- Arcade HUD text helpers ---
+static void ArcText(const char *t, int x, int y, int size, Color col) {
+    // Chunky drop-shadow for arcade readability.
+    int off = size >= 40 ? 4 : (size >= 24 ? 3 : 2);
+    DrawText(t, x + off, y + off, size, (Color){0, 0, 0, 200});
+    DrawText(t, x, y, size, col);
+}
+
+static void ArcTextOutlined(const char *t, int x, int y, int size, Color col, Color outline) {
+    // Heavy outline for hero text (position, countdown).
+    int o = size >= 80 ? 4 : 3;
+    for (int dx = -o; dx <= o; dx += o)
+        for (int dy = -o; dy <= o; dy += o)
+            if (dx || dy) DrawText(t, x + dx, y + dy, size, outline);
+    DrawText(t, x, y, size, col);
+}
+
+static void ArcPanel(int x, int y, int w, int h, Color fill, Color border) {
+    DrawRectangle(x, y, w, h, fill);
+    DrawRectangleLinesEx((Rectangle){(float)x, (float)y, (float)w, (float)h}, 3.0f, border);
+}
+
 void DrawCar(Car *car, int colorIdx) {
     // Copy parts and tint body color
     Part tinted[sizeof(carBody)/sizeof(Part)];
@@ -600,96 +622,142 @@ moveCar:;
         EndMode3D();
 
         // --- HUD ---
-        // Speed
-        DrawRectangle(20, sh - 50, 140, 40, (Color){0,0,0,160});
-        DrawText(TextFormat("%.0f km/h", fabsf(cars[0].speed) * 3.6f), 30, sh - 42, 26,
-            (Color){0,200,255,255});
+        // Speedometer (bottom-left, chunky panel)
+        {
+            int panelW = 280, panelH = 90;
+            int px = 20, py = sh - panelH - 20;
+            ArcPanel(px, py, panelW, panelH, (Color){0, 0, 0, 200}, (Color){0, 200, 255, 255});
+            int kph = (int)(fabsf(cars[0].speed) * 3.6f);
+            const char *speedTxt = TextFormat("%d", kph);
+            int speedW = MeasureText(speedTxt, 64);
+            ArcText(speedTxt, px + panelW - speedW - 70, py + 12, 64, (Color){0, 220, 255, 255});
+            ArcText("KM/H", px + panelW - 60, py + 40, 24, (Color){0, 180, 220, 255});
 
-        // Position
-        const char *ordinals[] = {"1st","2nd","3rd","4th"};
-        DrawText(ordinals[playerRank - 1], sw - 80, 15, 40, WHITE);
+            // Surface label above speedometer
+            SurfaceType surf = GetSurface(cars[0].pos);
+            const char *surfName = (surf == SURF_TARMAC) ? "TARMAC" : (surf == SURF_GRAVEL) ? "GRAVEL" : "MUD";
+            Color surfCol = (surf == SURF_TARMAC) ? (Color){180, 200, 220, 255} :
+                            (surf == SURF_GRAVEL) ? (Color){230, 200, 140, 255} : (Color){180, 130, 70, 255};
+            ArcText(surfName, px + 12, py - 32, 28, surfCol);
+        }
 
-        // Lap
+        // Position (top-right, huge)
+        const char *ordinals[] = {"1st", "2nd", "3rd", "4th"};
+        Color posCol = (playerRank == 1) ? GOLD : (playerRank == 2) ? (Color){200,200,220,255} :
+                       (playerRank == 3) ? (Color){200,130,60,255} : WHITE;
+        int posSize = 88;
+        int posW = MeasureText(ordinals[playerRank - 1], posSize);
+        ArcTextOutlined(ordinals[playerRank - 1], sw - posW - 30, 15, posSize, posCol, BLACK);
+
+        // Lap / timers (top-right under position)
         int dispLap = cars[0].lap + 1;
         if (dispLap > TOTAL_LAPS) dispLap = TOTAL_LAPS;
-        DrawText(TextFormat("LAP %d/%d", dispLap, TOTAL_LAPS), sw - 130, 58, 22, WHITE);
+        const char *lapTxt = TextFormat("LAP %d/%d", dispLap, TOTAL_LAPS);
+        int lapW = MeasureText(lapTxt, 40);
+        ArcText(lapTxt, sw - lapW - 30, 115, 40, WHITE);
 
-        // Timers
         int mins = (int)raceTimer / 60, secs = (int)raceTimer % 60;
         int ms = (int)(fmodf(raceTimer, 1.0f) * 100);
-        DrawText(TextFormat("%d:%02d.%02d", mins, secs, ms), sw - 130, 85, 18, WHITE);
+        const char *timeTxt = TextFormat("%d:%02d.%02d", mins, secs, ms);
+        int timeW = MeasureText(timeTxt, 34);
+        ArcText(timeTxt, sw - timeW - 30, 160, 34, (Color){0, 220, 255, 255});
 
-        // Current lap time
-        DrawText(TextFormat("Lap: %.2f", lapTimer), sw - 130, 108, 14, (Color){200,200,200,255});
+        const char *lapTimeTxt = TextFormat("LAP  %.2f", lapTimer);
+        int ltW = MeasureText(lapTimeTxt, 24);
+        ArcText(lapTimeTxt, sw - ltW - 30, 200, 24, (Color){220, 220, 230, 255});
 
-        // Best lap
-        if (bestLapTime < 999.0f)
-            DrawText(TextFormat("Best: %.2f", bestLapTime), sw - 130, 125, 14, YELLOW);
+        if (bestLapTime < 999.0f) {
+            const char *bestTxt = TextFormat("BEST %.2f", bestLapTime);
+            int bW = MeasureText(bestTxt, 24);
+            ArcText(bestTxt, sw - bW - 30, 228, 24, YELLOW);
+        }
 
-        // Surface indicator
-        SurfaceType surf = GetSurface(cars[0].pos);
-        const char *surfName = (surf == SURF_TARMAC) ? "TARMAC" : (surf == SURF_GRAVEL) ? "GRAVEL" : "MUD";
-        Color surfCol = (surf == SURF_TARMAC) ? (Color){150,150,160,255} :
-                        (surf == SURF_GRAVEL) ? (Color){180,160,120,255} : (Color){120,90,50,255};
-        DrawText(surfName, 30, sh - 70, 14, surfCol);
-
-        // Drift/boost
+        // Drift/boost (top-center, flashy)
         if (cars[0].drifting) {
             Color driftCol = (cars[0].driftTime > 1.5f) ? ORANGE : YELLOW;
-            DrawText("DRIFT!", sw/2 - 28, 20, 22, driftCol);
+            int dw = MeasureText("DRIFT!", 56);
+            ArcTextOutlined("DRIFT!", sw / 2 - dw / 2, 20, 56, driftCol, BLACK);
         }
-        if (cars[0].boostTimer > 0) DrawText("BOOST!", sw/2 - 30, 20, 22, RED);
+        if (cars[0].boostTimer > 0) {
+            // Flash: alternate red/yellow ~8 times per second
+            Color bc = ((int)(raceTimer * 8) & 1) ? RED : YELLOW;
+            int bw = MeasureText("BOOST!", 56);
+            ArcTextOutlined("BOOST!", sw / 2 - bw / 2, 20, 56, bc, BLACK);
+        }
 
-        // Mini-map
+        // Mini-map (bottom-right, bigger)
         {
-            int mmx = sw - 140, mmy = sh - 140;
-            float mmScale = 0.45f;
-            DrawRectangle(mmx - 5, mmy - 5, 135, 135, (Color){0,0,0,120});
+            int mmSize = 220, mmPad = 6;
+            int mmx = sw - mmSize - 20, mmy = sh - mmSize - 20;
+            ArcPanel(mmx, mmy, mmSize, mmSize, (Color){0, 0, 0, 180}, (Color){80, 180, 220, 255});
+            float mmScale = (mmSize - mmPad * 2) * 0.5f / 50.0f;  // fit roughly ±50 track units
+            int cx = mmx + mmSize / 2, cy = mmy + mmSize / 2;
             for (int i = 0; i < TRACK_SEGS; i++) {
                 int next = (i + 1) % TRACK_SEGS;
-                Vector2 a = {mmx + 62 + trackPts[i].x * mmScale, mmy + 62 + trackPts[i].z * mmScale};
-                Vector2 b = {mmx + 62 + trackPts[next].x * mmScale, mmy + 62 + trackPts[next].z * mmScale};
+                Vector2 a = {cx + trackPts[i].x * mmScale,    cy + trackPts[i].z * mmScale};
+                Vector2 b = {cx + trackPts[next].x * mmScale, cy + trackPts[next].z * mmScale};
                 Color lineCol;
                 switch (trackSurface[i]) {
-                    case SURF_TARMAC: lineCol = (Color){100,100,110,200}; break;
-                    case SURF_GRAVEL: lineCol = (Color){160,140,100,200}; break;
-                    case SURF_MUD:    lineCol = (Color){100,80,50,200}; break;
+                    case SURF_TARMAC: lineCol = (Color){120, 120, 140, 240}; break;
+                    case SURF_GRAVEL: lineCol = (Color){190, 170, 120, 240}; break;
+                    case SURF_MUD:    lineCol = (Color){140, 100, 60, 240};  break;
                 }
-                DrawLineV(a, b, lineCol);
+                DrawLineEx(a, b, 3.0f, lineCol);
             }
             for (int ci = 0; ci < NUM_CARS; ci++) {
-                float mx = mmx + 62 + cars[ci].pos.x * mmScale;
-                float mz = mmy + 62 + cars[ci].pos.z * mmScale;
-                DrawCircle(mx, mz, cars[ci].isPlayer ? 3 : 2, cars[ci].color);
+                float mx = cx + cars[ci].pos.x * mmScale;
+                float mz = cy + cars[ci].pos.z * mmScale;
+                DrawCircle(mx, mz, cars[ci].isPlayer ? 6 : 4, cars[ci].color);
+                if (cars[ci].isPlayer)
+                    DrawCircleLines(mx, mz, 9, WHITE);
             }
         }
 
-        // Countdown
+        // Countdown (center, huge)
         if (countdown > 0 && !raceStarted) {
             int cd = (int)ceilf(countdown);
             if (cd > 0) {
                 const char *cdText = TextFormat("%d", cd);
-                int cdw = MeasureText(cdText, 80);
-                DrawText(cdText, sw/2 - cdw/2, sh/2 - 40, 80, WHITE);
+                int cdSize = 220;
+                // Scale pulses with fraction — big on each whole-second tick
+                float frac = countdown - floorf(countdown);
+                float pulse = 1.0f + (1.0f - frac) * 0.25f;
+                int size = (int)(cdSize * pulse);
+                int cdw = MeasureText(cdText, size);
+                Color col = (cd == 1) ? YELLOW : WHITE;
+                ArcTextOutlined(cdText, sw / 2 - cdw / 2, sh / 2 - size / 2, size, col, BLACK);
             }
         }
         if (raceStarted && countdown > -0.8f) {
-            int gow = MeasureText("GO!", 80);
-            DrawText("GO!", sw/2 - gow/2, sh/2 - 40, 80, GREEN);
+            int gow = MeasureText("GO!", 220);
+            ArcTextOutlined("GO!", sw / 2 - gow / 2, sh / 2 - 110, 220, GREEN, BLACK);
         }
 
-        // Finish
+        // Finish screen
         if (cars[0].finished) {
-            DrawRectangle(sw/2 - 160, sh/2 - 50, 320, 110, (Color){0,0,0,200});
-            DrawText(TextFormat("FINISH  %s", ordinals[playerRank-1]), sw/2 - 110, sh/2 - 40, 34, GOLD);
-            DrawText(TextFormat("Time: %d:%02d.%02d", mins, secs, ms), sw/2 - 70, sh/2, 20, WHITE);
-            if (bestLapTime < 999.0f)
-                DrawText(TextFormat("Best Lap: %.2f", bestLapTime), sw/2 - 70, sh/2 + 25, 18, YELLOW);
+            DrawRectangle(0, 0, sw, sh, (Color){0, 0, 0, 120});
+            ArcPanel(sw / 2 - 320, sh / 2 - 140, 640, 280,
+                     (Color){10, 15, 30, 230}, (Color){255, 215, 0, 255});
+
+            const char *finTxt = TextFormat("FINISH  %s", ordinals[playerRank - 1]);
+            int fw = MeasureText(finTxt, 72);
+            ArcTextOutlined(finTxt, sw / 2 - fw / 2, sh / 2 - 110, 72, GOLD, BLACK);
+
+            const char *tTxt = TextFormat("TIME  %d:%02d.%02d", mins, secs, ms);
+            int tw = MeasureText(tTxt, 40);
+            ArcText(tTxt, sw / 2 - tw / 2, sh / 2 - 10, 40, WHITE);
+
+            if (bestLapTime < 999.0f) {
+                const char *bTxt = TextFormat("BEST LAP  %.2f", bestLapTime);
+                int bw = MeasureText(bTxt, 36);
+                ArcText(bTxt, sw / 2 - bw / 2, sh / 2 + 40, 36, YELLOW);
+            }
         }
 
-        DrawText("WASD: Drive  Shift/Ctrl+Turn: Drift  Release drift for boost", 10, sh - 16, 11,
-            (Color){80,80,100,200});
-        DrawFPS(10, 10);
+        // Help text and FPS (more visible)
+        ArcText("WASD: DRIVE   SHIFT/CTRL+TURN: DRIFT   RELEASE FOR BOOST",
+                20, sh - 22, 16, (Color){140, 140, 170, 230});
+        ArcText(TextFormat("%d FPS", GetFPS()), 20, 15, 22, GREEN);
         EndDrawing();
     }
 
