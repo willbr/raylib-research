@@ -469,9 +469,30 @@ void DrawCar(Car *car, int colorIdx) {
     DrawObject3DRotated(tinted, carBodyCount, car->pos,
                         car->visPitch, car->rotation, car->visRoll);
 
-    // Shadow (sits just below the car on the track surface)
-    DrawCircle3D((Vector3){car->pos.x, car->pos.y - 0.19f, car->pos.z}, 1.0f,
-        (Vector3){1,0,0}, 90, (Color){0,0,0,40});
+    // Shadow: a rotated rectangle pinned to the road surface, not the car.
+    // Separates from the car body when airborne so jumps read clearly.
+    {
+        float shadowY = TrackHeightAt(car->pos, car->currentSeg) - 0.18f;
+        // Fade + shrink a touch with altitude above the ground for perspective.
+        float alt = car->pos.y - shadowY - 0.02f;
+        if (alt < 0) alt = 0;
+        float shrink = 1.0f / (1.0f + alt * 0.1f);
+        unsigned char a = (unsigned char)(140 * shrink);
+        Color sc = (Color){0, 0, 0, a};
+        float hx = 0.6f * shrink, hz = 1.0f * shrink;
+        Vector3 c0 = RotateY((Vector3){-hx, 0, -hz}, -car->rotation);
+        Vector3 c1 = RotateY((Vector3){ hx, 0, -hz}, -car->rotation);
+        Vector3 c2 = RotateY((Vector3){ hx, 0,  hz}, -car->rotation);
+        Vector3 c3 = RotateY((Vector3){-hx, 0,  hz}, -car->rotation);
+        Vector3 p0 = { car->pos.x + c0.x, shadowY, car->pos.z + c0.z };
+        Vector3 p1 = { car->pos.x + c1.x, shadowY, car->pos.z + c1.z };
+        Vector3 p2 = { car->pos.x + c2.x, shadowY, car->pos.z + c2.z };
+        Vector3 p3 = { car->pos.x + c3.x, shadowY, car->pos.z + c3.z };
+        DrawTriangle3D(p0, p1, p2, sc);
+        DrawTriangle3D(p0, p2, p3, sc);
+        DrawTriangle3D(p0, p2, p1, sc);
+        DrawTriangle3D(p0, p3, p2, sc);
+    }
 
     // Drift smoke
     if (car->drifting && car->speed > 10) {
