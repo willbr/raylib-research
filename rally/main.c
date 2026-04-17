@@ -139,6 +139,11 @@ typedef struct { Vector3 pos; float radius; } Puddle;
 static Puddle puddles[MAX_PUDDLES];
 static int numPuddles = 0;
 
+#define MAX_FANS 80
+typedef struct { Vector3 pos; Color shirt; float phase; } Fan;
+static Fan fans[MAX_FANS];
+static int numFans = 0;
+
 void GenerateTrack(void) {
     // Winding rally course with varied curvature and gentle height.
     for (int i = 0; i < TRACK_SEGS; i++) {
@@ -295,6 +300,34 @@ void GenerateTrack(void) {
             pr->rotY = (float)GetRandomValue(0, 314) * 0.01f;
             pr->type = PROP_CRATE;
             pr->alive = true;
+        }
+    }
+
+    // Cheering fans lining the shoulder — clusters of 2–4 every handful
+    // of segments, on either side, just outside the bank lip.
+    numFans = 0;
+    Color shirtPalette[] = {
+        {220, 80, 70,255}, {70,120,220,255}, {230,200, 80,255},
+        {90,190,110,255}, {200,100,210,255}, {240,240,240,255},
+    };
+    int shirtCount = sizeof(shirtPalette) / sizeof(shirtPalette[0]);
+    for (int i = 1; i < TRACK_SEGS && numFans < MAX_FANS; i += 2) {
+        for (int side = -1; side <= 1; side += 2) {
+            if (numFans >= MAX_FANS) break;
+            if (GetRandomValue(0, 2) != 0) continue;   // not every segment
+            int cluster = GetRandomValue(2, 4);
+            for (int c = 0; c < cluster && numFans < MAX_FANS; c++) {
+                float radial = (TRACK_WIDTH / 2.0f) + BANK_WIDTH + 1.0f
+                             + (float)GetRandomValue(0, 15) / 10.0f;
+                float lateral = ((float)GetRandomValue(-20, 20)) / 10.0f;
+                Vector3 p = Vector3Add(trackPts[i], Vector3Scale(trackNormals[i], side * radial));
+                p = Vector3Add(p, Vector3Scale(trackDirs[i], lateral));
+                p.y = trackPts[i].y;
+                fans[numFans].pos = p;
+                fans[numFans].shirt = shirtPalette[GetRandomValue(0, shirtCount - 1)];
+                fans[numFans].phase = (float)GetRandomValue(0, 628) / 100.0f;
+                numFans++;
+            }
         }
     }
 
@@ -504,6 +537,27 @@ void DrawTrack(void) {
         DrawTriangle3D(a, b2, b, chk);
         DrawTriangle3D(a, a2, b2, chk);
     }
+}
+
+void DrawFan(const Fan *f, float t) {
+    // Simple stick figure with a bobbing arms-in-the-air animation.
+    float bob  = sinf(t * 6.0f + f->phase) * 0.12f;     // cheer bob
+    float wave = sinf(t * 9.0f + f->phase * 1.3f) * 0.3f;  // arm sway
+    Vector3 feet = { f->pos.x, f->pos.y,        f->pos.z };
+    Vector3 hip  = { f->pos.x, f->pos.y + 0.55f, f->pos.z };
+    Vector3 chest= { f->pos.x, f->pos.y + 0.95f + bob, f->pos.z };
+    Vector3 head = { f->pos.x, f->pos.y + 1.10f + bob, f->pos.z };
+    // Legs
+    DrawCylinderEx(feet, hip, 0.07f, 0.07f, 6, (Color){40, 40, 60, 255});
+    // Torso
+    DrawCylinderEx(hip, chest, 0.13f, 0.12f, 6, f->shirt);
+    // Head
+    DrawSphere(head, 0.13f, (Color){235, 200, 170, 255});
+    // Arms raised
+    Vector3 lHand = { f->pos.x - 0.25f, f->pos.y + 1.35f + bob + wave, f->pos.z };
+    Vector3 rHand = { f->pos.x + 0.25f, f->pos.y + 1.35f + bob - wave, f->pos.z };
+    DrawCylinderEx(chest, lHand, 0.05f, 0.04f, 5, f->shirt);
+    DrawCylinderEx(chest, rHand, 0.05f, 0.04f, 5, f->shirt);
 }
 
 void DrawProp(const Prop *p) {
@@ -1199,6 +1253,9 @@ moveCar:;
 
             // Crashable props (fences + crates)
             for (int i = 0; i < numProps; i++) DrawProp(&props[i]);
+
+            // Cheering fans — bob in time with raceTimer
+            for (int i = 0; i < numFans; i++) DrawFan(&fans[i], raceTimer);
 
             // Puddles (flat blue discs flush with the road)
             for (int i = 0; i < numPuddles; i++) {
