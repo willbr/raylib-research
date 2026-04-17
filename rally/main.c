@@ -410,16 +410,17 @@ int main(void) {
     GenerateTrack();
 
     // Init cars
-    Car cars[NUM_CARS];
+    Car cars[NUM_CARS] = {0};
     Color carColors[] = { {200,40,40,255}, {40,40,200,255}, {40,180,40,255}, {220,200,40,255} };
     for (int i = 0; i < NUM_CARS; i++) {
         float offset = (float)(i - NUM_CARS/2) * 2.5f;
         cars[i].pos = Vector3Add(trackPts[0], Vector3Scale(trackNormals[0], offset));
-        cars[i].pos.y = 0.2f;
+        cars[i].pos.y = trackPts[0].y + 0.2f;
         cars[i].rotation = atan2f(trackDirs[0].x, trackDirs[0].z);
         cars[i].speed = 0;
         cars[i].lap = 0;
         cars[i].nextWP = 1;
+        cars[i].currentSeg = 0;
         cars[i].isPlayer = (i == 0);
         cars[i].finished = false;
         cars[i].drifting = false;
