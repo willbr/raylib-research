@@ -125,7 +125,11 @@ typedef struct {
     Vector3 size;   // width, height, depth (in local orientation before rotY)
     float rotY;
     PropType type;
-    bool alive;
+    bool alive;     // solid collider (false once hit)
+    // Tumbling-debris state, active while flyTimer > 0 after a hit.
+    Vector3 vel;
+    float angVel;
+    float flyTimer;
 } Prop;
 static Prop props[MAX_PROPS];
 static int numProps = 0;
@@ -503,7 +507,7 @@ void DrawTrack(void) {
 }
 
 void DrawProp(const Prop *p) {
-    if (!p->alive) return;
+    if (!p->alive && p->flyTimer <= 0.0f) return;
     Color main, trim;
     if (p->type == PROP_CRATE) {
         main = (Color){150, 100,  60, 255};
@@ -988,9 +992,8 @@ moveCar:;
                 }
             }
 
-            // Crashable prop collision — crates and fences splinter
-            // on contact and barely slow the car (they're meant to
-            // feel like debris, not walls).
+            // Crashable prop collision — crates spin and tumble away
+            // for a moment after the hit; fences just disintegrate.
             for (int pi = 0; pi < numProps; pi++) {
                 Prop *pr = &props[pi];
                 if (!pr->alive) continue;
@@ -1000,6 +1003,21 @@ moveCar:;
                 if (dx*dx + dz*dz < (hitR + 0.4f) * (hitR + 0.4f)) {
                     pr->alive = false;
                     car->speed *= (pr->type == PROP_FENCE) ? 0.90f : 0.82f;
+                    if (pr->type == PROP_CRATE) {
+                        // Fling the crate away from the car's direction of
+                        // travel with some upward kick and a random spin.
+                        float hx = -dx, hz = -dz;  // from car → prop
+                        float mag = sqrtf(hx*hx + hz*hz);
+                        if (mag > 1e-4f) { hx /= mag; hz /= mag; }
+                        float shove = 6.0f + fabsf(car->speed) * 0.4f;
+                        pr->vel = (Vector3){
+                            hx * shove + ((float)GetRandomValue(-20,20))/20.0f,
+                            5.0f + (float)GetRandomValue(0, 40) / 10.0f,
+                            hz * shove + ((float)GetRandomValue(-20,20))/20.0f,
+                        };
+                        pr->angVel = ((float)GetRandomValue(-80, 80)) / 10.0f;
+                        pr->flyTimer = 1.8f;
+                    }
                     // Debris puff: brown for crates, lighter for fences.
                     Color debris = (pr->type == PROP_FENCE)
                         ? (Color){200, 200, 200, 180}
@@ -1007,6 +1025,25 @@ moveCar:;
                     for (int k = 0; k < 6; k++) {
                         SpawnDust((Vector3){pr->pos.x, pr->pos.y + 0.3f, pr->pos.z}, debris);
                     }
+                }
+            }
+
+            // Integrate flying props (crates only).
+            for (int pi = 0; pi < numProps; pi++) {
+                Prop *pr = &props[pi];
+                if (pr->flyTimer <= 0.0f) continue;
+                pr->flyTimer -= dt;
+                pr->vel.y -= 18.0f * dt;           // gravity
+                pr->pos = Vector3Add(pr->pos, Vector3Scale(pr->vel, dt));
+                pr->rotY += pr->angVel * dt;
+                // Bounce off the ground once, then settle.
+                float floorY = TrackHeightAt(pr->pos, car->currentSeg) - 0.2f;
+                if (pr->pos.y < floorY + 0.1f && pr->vel.y < 0.0f) {
+                    pr->pos.y = floorY + 0.1f;
+                    pr->vel.y = -pr->vel.y * 0.35f;
+                    pr->vel.x *= 0.6f; pr->vel.z *= 0.6f;
+                    pr->angVel *= 0.5f;
+                    if (fabsf(pr->vel.y) < 0.8f) pr->flyTimer = fminf(pr->flyTimer, 0.3f);
                 }
             }
 
