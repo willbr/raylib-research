@@ -470,19 +470,24 @@ moveCar:;
             }
             car->pos.y = 0.2f;
 
-            // Track boundary: use local segment search for smooth push
+            // Track boundary: only push when the car is actually past the edge.
+            // The previous implementation triggered at (edgeDist - 3), i.e. the
+            // inner 40% of the track, so it was constantly nudging the car
+            // toward centerline during normal driving — felt like teleporting.
+            // Inside the track: total freedom. Past the edge: linear capped push.
             car->currentSeg = NearestSegLocal(car->pos, car->currentSeg);
             Vector3 closest = ClosestPointOnSeg(car->pos, car->currentSeg);
             Vector3 toCenter = Vector3Subtract(closest, car->pos);
             toCenter.y = 0;
             float trackDist = Vector3Length(toCenter);
             float edgeDist = TRACK_WIDTH / 2.0f;
-            if (trackDist > edgeDist - 3.0f && trackDist > 0.01f) {
+            if (trackDist > edgeDist && trackDist > 0.01f) {
                 Vector3 pushDir = Vector3Scale(toCenter, 1.0f / trackDist);
-                float overEdge = trackDist - (edgeDist - 3.0f);
-                float pushStrength = overEdge * overEdge * 1.5f;
+                float overEdge = trackDist - edgeDist;
+                float pushStrength = 3.0f + overEdge * 4.0f;
+                if (pushStrength > 10.0f) pushStrength = 10.0f;
                 car->pos = Vector3Add(car->pos, Vector3Scale(pushDir, pushStrength * dt));
-                if (trackDist > edgeDist) car->speed *= (1.0f - 0.3f * dt);
+                car->speed *= (1.0f - 0.3f * dt);
             }
 
             // Tree collision
