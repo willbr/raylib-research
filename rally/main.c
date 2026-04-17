@@ -586,11 +586,16 @@ int main(void) {
             if (car->airborne) { accel = 0; steer = 0; drag = 1.0f; }
 
             // Physics
-            float prevSpeedSgn = car->speed;
-            car->speed += accel * dt;
-            // Handbrake brings the car to rest but never past it —
-            // reverse requires pressing S / Down.
-            if (handbraking && prevSpeedSgn > 0.0f && car->speed < 0.0f) car->speed = 0.0f;
+            if (handbraking) {
+                // Handbrake decelerates toward 0 from either direction and
+                // holds there — reverse requires S / Down.
+                float dv = CAR_HANDBRAKE * dt;
+                if      (car->speed >  dv) car->speed -= dv;
+                else if (car->speed < -dv) car->speed += dv;
+                else                       car->speed  = 0.0f;
+            } else {
+                car->speed += accel * dt;
+            }
             car->speed *= drag;
             car->speed = Clamp(car->speed, -10.0f, maxSpd);
             car->steerInput = steer;
