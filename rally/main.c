@@ -33,6 +33,7 @@ typedef struct {
     float speed;
     float velY;      // vertical speed (only non-zero when airborne)
     bool airborne;   // off the ground — gravity applies, no road-follow
+    float rampCooldown; // seconds until another ramp launch is allowed
     int lap;
     int nextWP;
     int currentSeg;  // cached nearest segment
@@ -183,11 +184,19 @@ void GenerateTrack(void) {
     }
 }
 
+// XZ-only distance — used for segment proximity so elevated (ramp) track
+// points don't register as "farther" than flat ones and cause currentSeg
+// to oscillate at the foot of a ramp.
+static float XZDistance(Vector3 a, Vector3 b) {
+    float dx = a.x - b.x, dz = a.z - b.z;
+    return sqrtf(dx * dx + dz * dz);
+}
+
 int NearestSeg(Vector3 pos) {
     int best = 0;
     float bestD = 1e9f;
     for (int i = 0; i < TRACK_SEGS; i++) {
-        float d = Vector3Distance(pos, trackPts[i]);
+        float d = XZDistance(pos, trackPts[i]);
         if (d < bestD) { bestD = d; best = i; }
     }
     return best;
@@ -196,11 +205,11 @@ int NearestSeg(Vector3 pos) {
 // Search only nearby segments to avoid jitter at corners
 int NearestSegLocal(Vector3 pos, int hint) {
     int best = hint;
-    float bestD = Vector3Distance(pos, trackPts[hint]);
+    float bestD = XZDistance(pos, trackPts[hint]);
     int range = 5;
     for (int offset = -range; offset <= range; offset++) {
         int idx = (hint + offset + TRACK_SEGS) % TRACK_SEGS;
-        float d = Vector3Distance(pos, trackPts[idx]);
+        float d = XZDistance(pos, trackPts[idx]);
         if (d < bestD) { bestD = d; best = idx; }
     }
     return best;
@@ -462,6 +471,7 @@ int main(void) {
         cars[i].velY = 0;
         cars[i].airborne = false;
         cars[i].prevSeg = 0;
+        cars[i].rampCooldown = 0;
         cars[i].isPlayer = (i == 0);
         cars[i].finished = false;
         cars[i].drifting = false;
@@ -601,18 +611,20 @@ moveCar:;
                         car->airborne = false;
                     }
                 } else {
-                    // Stepping into a ramp segment this frame at speed?
-                    // That's the one moment we launch.
+                    if (car->rampCooldown > 0.0f) car->rampCooldown -= dt;
                     bool justEnteredRamp =
                         (car->currentSeg != car->prevSeg) && IsRampSeg(car->currentSeg);
-                    if (justEnteredRamp && fabsf(car->speed) > 15.0f) {
+                    if (justEnteredRamp && fabsf(car->speed) > 15.0f
+                        && car->rampCooldown <= 0.0f) {
                         car->airborne = true;
-                        // Launch velocity scales with speed (capped) so slow
-                        // approaches don't fly but fast ones get real air.
-                        float launch = 6.0f + fabsf(car->speed) * 0.3f;
-                        if (launch > 20.0f) launch = 20.0f;
+                        // Modest launch — speed-scaled with a firm cap so
+                        // even top-speed hits stay in rally territory.
+                        float launch = 4.0f + fabsf(car->speed) * 0.2f;
+                        if (launch > 13.0f) launch = 13.0f;
                         car->velY = launch;
-                        // Keep pos.y on the ramp surface; physics takes over next frame.
+                        // 0.6s lock-out: stops re-launch if currentSeg
+                        // re-crosses the ramp due to corner jitter.
+                        car->rampCooldown = 0.6f;
                         car->pos.y = targetY;
                     } else {
                         // Glued to the road.
