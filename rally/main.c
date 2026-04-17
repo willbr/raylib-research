@@ -703,17 +703,32 @@ moveCar:;
             ArcTextOutlined("BOOST!", sw / 2 - bw / 2, 20, 56, bc, BLACK);
         }
 
-        // Mini-map (bottom-right, bigger)
+        // Mini-map (bottom-right, auto-fit to track bounds)
         {
-            int mmSize = 220, mmPad = 6;
+            int mmSize = 220, mmPad = 10;
             int mmx = sw - mmSize - 20, mmy = sh - mmSize - 20;
             ArcPanel(mmx, mmy, mmSize, mmSize, (Color){0, 0, 0, 180}, (Color){80, 180, 220, 255});
-            float mmScale = (mmSize - mmPad * 2) * 0.5f / 50.0f;  // fit roughly ±50 track units
+
+            // Compute track bounds so the map auto-fits regardless of track shape.
+            float minX = 1e9f, maxX = -1e9f, minZ = 1e9f, maxZ = -1e9f;
+            for (int i = 0; i < TRACK_SEGS; i++) {
+                if (trackPts[i].x < minX) minX = trackPts[i].x;
+                if (trackPts[i].x > maxX) maxX = trackPts[i].x;
+                if (trackPts[i].z < minZ) minZ = trackPts[i].z;
+                if (trackPts[i].z > maxZ) maxZ = trackPts[i].z;
+            }
+            float centerX = (minX + maxX) * 0.5f;
+            float centerZ = (minZ + maxZ) * 0.5f;
+            float halfExt = fmaxf((maxX - minX) * 0.5f, (maxZ - minZ) * 0.5f) + 8.0f;
+            float mmScale = (mmSize - mmPad * 2) * 0.5f / halfExt;
             int cx = mmx + mmSize / 2, cy = mmy + mmSize / 2;
+
             for (int i = 0; i < TRACK_SEGS; i++) {
                 int next = (i + 1) % TRACK_SEGS;
-                Vector2 a = {cx + trackPts[i].x * mmScale,    cy + trackPts[i].z * mmScale};
-                Vector2 b = {cx + trackPts[next].x * mmScale, cy + trackPts[next].z * mmScale};
+                Vector2 a = {cx + (trackPts[i].x    - centerX) * mmScale,
+                             cy + (trackPts[i].z    - centerZ) * mmScale};
+                Vector2 b = {cx + (trackPts[next].x - centerX) * mmScale,
+                             cy + (trackPts[next].z - centerZ) * mmScale};
                 Color lineCol;
                 switch (trackSurface[i]) {
                     case SURF_TARMAC: lineCol = (Color){120, 120, 140, 240}; break;
@@ -723,8 +738,8 @@ moveCar:;
                 DrawLineEx(a, b, 3.0f, lineCol);
             }
             for (int ci = 0; ci < NUM_CARS; ci++) {
-                float mx = cx + cars[ci].pos.x * mmScale;
-                float mz = cy + cars[ci].pos.z * mmScale;
+                float mx = cx + (cars[ci].pos.x - centerX) * mmScale;
+                float mz = cy + (cars[ci].pos.z - centerZ) * mmScale;
                 DrawCircle(mx, mz, cars[ci].isPlayer ? 6 : 4, cars[ci].color);
                 if (cars[ci].isPlayer)
                     DrawCircleLines(mx, mz, 9, WHITE);
