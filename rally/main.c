@@ -34,6 +34,8 @@ typedef struct {
     float velY;      // vertical speed (only non-zero when airborne)
     bool airborne;   // off the ground — gravity applies, no road-follow
     float rampCooldown; // seconds until another ramp launch is allowed
+    float visRoll;   // visual lean into corners (radians, cosmetic)
+    float visPitch;  // visual nose-up/down tilt (radians, cosmetic)
     int lap;
     int nextWP;
     int currentSeg;  // cached nearest segment
@@ -422,9 +424,8 @@ void DrawCar(Car *car, int colorIdx) {
     Color darker = { car->color.r*3/4, car->color.g*3/4, car->color.b*3/4, 255 };
     tinted[1].color = darker;                         // cabin
 
-    for (int i = 0; i < carBodyCount; i++) {
-        DrawPart(&tinted[i], car->pos, -car->rotation);
-    }
+    DrawObject3DRotated(tinted, carBodyCount, car->pos,
+                        car->visPitch, -car->rotation, car->visRoll);
 
     // Shadow (sits just below the car on the track surface)
     DrawCircle3D((Vector3){car->pos.x, car->pos.y - 0.19f, car->pos.z}, 1.0f,
@@ -472,6 +473,8 @@ int main(void) {
         cars[i].airborne = false;
         cars[i].prevSeg = 0;
         cars[i].rampCooldown = 0;
+        cars[i].visRoll = 0;
+        cars[i].visPitch = 0;
         cars[i].isPlayer = (i == 0);
         cars[i].finished = false;
         cars[i].drifting = false;
@@ -635,6 +638,34 @@ moveCar:;
                         car->velY = 0.0f;
                     }
                 }
+            }
+
+            // --- Visual lean / tilt (cosmetic, does not affect physics) ---
+            {
+                float steerMag  = car->steerInput / CAR_TURN;
+                float speedFrac = fabsf(car->speed) / CAR_MAX_SPEED;
+                float targetRoll = -steerMag * speedFrac * 0.22f;
+                if (car->drifting)  targetRoll *= 1.8f;
+                if (car->airborne)  targetRoll *= 0.3f;
+
+                float targetPitch = 0.0f;
+                if (car->airborne) {
+                    float v = car->velY;
+                    if (v >  15.0f) v =  15.0f;
+                    if (v < -15.0f) v = -15.0f;
+                    targetPitch = -v * 0.025f;  // nose up while rising
+                } else {
+                    int next = (car->currentSeg + 1) % TRACK_SEGS;
+                    float dx = XZDistance(trackPts[next], trackPts[car->currentSeg]);
+                    float dy = trackPts[next].y - trackPts[car->currentSeg].y;
+                    if (dx > 0.001f) targetPitch = -atan2f(dy, dx);
+                }
+
+                // Exponential-style smoothing so motion reads dynamic but stays framerate-safe.
+                float rRate = 1.0f - expf(-10.0f * dt);
+                float pRate = 1.0f - expf(-6.0f  * dt);
+                car->visRoll  += (targetRoll  - car->visRoll)  * rRate;
+                car->visPitch += (targetPitch - car->visPitch) * pRate;
             }
 
             // Track boundary: only push when the car is actually past the edge.
