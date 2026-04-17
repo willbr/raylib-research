@@ -118,6 +118,23 @@ typedef struct { Vector3 pos; Vector3 size; float rotY; Color wall, roof; } Buil
 static Building buildings[MAX_BUILDINGS];
 static int numBuildings = 0;
 
+#define MAX_PROPS 64
+typedef enum { PROP_CRATE, PROP_FENCE } PropType;
+typedef struct {
+    Vector3 pos;
+    Vector3 size;   // width, height, depth (in local orientation before rotY)
+    float rotY;
+    PropType type;
+    bool alive;
+} Prop;
+static Prop props[MAX_PROPS];
+static int numProps = 0;
+
+#define MAX_PUDDLES 40
+typedef struct { Vector3 pos; float radius; } Puddle;
+static Puddle puddles[MAX_PUDDLES];
+static int numPuddles = 0;
+
 void GenerateTrack(void) {
     // Winding rally course with varied curvature and gentle height.
     for (int i = 0; i < TRACK_SEGS; i++) {
@@ -244,6 +261,50 @@ void GenerateTrack(void) {
             b->wall = wallPalette[GetRandomValue(0, paletteWalls - 1)];
             b->roof = roofPalette[GetRandomValue(0, paletteRoofs - 1)];
         }
+    }
+
+    // Place crashable props: fences lining the shoulder and crates on the
+    // road surface. Sparse so the track stays mostly clear.
+    numProps = 0;
+    for (int i = 3; i < TRACK_SEGS && numProps < MAX_PROPS; i++) {
+        // Fence rows on the shoulder every few segments, alternating sides.
+        if ((i % 4) == 0 && numProps + 1 < MAX_PROPS) {
+            int side = ((i / 4) % 2) ? 1 : -1;
+            float off = TRACK_WIDTH / 2.0f + 0.6f;
+            Vector3 p = Vector3Add(trackPts[i], Vector3Scale(trackNormals[i], side * off));
+            p.y = trackPts[i].y + 0.4f;  // sit on top of the shoulder
+            Prop *pr = &props[numProps++];
+            pr->pos = p;
+            pr->size = (Vector3){2.4f, 0.9f, 0.25f};
+            pr->rotY = atan2f(trackDirs[i].x, trackDirs[i].z);
+            pr->type = PROP_FENCE;
+            pr->alive = true;
+        }
+        // Crates scattered in the road (rare — don't clog every lap).
+        if (GetRandomValue(0, 7) == 0 && numProps < MAX_PROPS) {
+            float off = ((float)GetRandomValue(-30, 30)) / 10.0f;  // -3..3 from centerline
+            Vector3 p = Vector3Add(trackPts[i], Vector3Scale(trackNormals[i], off));
+            p.y = trackPts[i].y + 0.4f;  // half-height above road
+            Prop *pr = &props[numProps++];
+            pr->pos = p;
+            pr->size = (Vector3){0.8f, 0.8f, 0.8f};
+            pr->rotY = (float)GetRandomValue(0, 314) * 0.01f;
+            pr->type = PROP_CRATE;
+            pr->alive = true;
+        }
+    }
+
+    // Puddles on mud segments — splash when driven through.
+    numPuddles = 0;
+    for (int i = 0; i < TRACK_SEGS && numPuddles < MAX_PUDDLES; i++) {
+        if (trackSurface[i] != SURF_MUD) continue;
+        if (GetRandomValue(0, 2) != 0) continue;
+        float off = ((float)GetRandomValue(-35, 35)) / 10.0f;
+        Vector3 p = Vector3Add(trackPts[i], Vector3Scale(trackNormals[i], off));
+        p.y = trackPts[i].y + 0.015f;  // flush on the road
+        puddles[numPuddles].pos = p;
+        puddles[numPuddles].radius = 0.9f + (float)GetRandomValue(0, 16) / 10.0f;
+        numPuddles++;
     }
 }
 
@@ -439,6 +500,24 @@ void DrawTrack(void) {
         DrawTriangle3D(a, b2, b, chk);
         DrawTriangle3D(a, a2, b2, chk);
     }
+}
+
+void DrawProp(const Prop *p) {
+    if (!p->alive) return;
+    Color main, trim;
+    if (p->type == PROP_CRATE) {
+        main = (Color){150, 100,  60, 255};
+        trim = (Color){110,  75,  40, 255};
+    } else {
+        main = (Color){220, 220, 220, 255};  // painted fence
+        trim = (Color){200,  50,  50, 255};
+    }
+    Vector3 center = { p->pos.x, p->pos.y, p->pos.z };
+    DrawCubeRotY(center, p->size.x, p->size.y, p->size.z, p->rotY, main);
+    // Trim strip along the top edge for readability.
+    Vector3 top = { p->pos.x, p->pos.y + p->size.y * 0.42f, p->pos.z };
+    DrawCubeRotY(top, p->size.x * 0.95f, p->size.y * 0.1f, p->size.z * 1.02f,
+                 p->rotY, trim);
 }
 
 void DrawBuilding(const Building *b) {
@@ -892,6 +971,45 @@ moveCar:;
                 }
             }
 
+            // Puddle splash: spawn blue dust while the car is passing through.
+            for (int pu = 0; pu < numPuddles; pu++) {
+                float dx = car->pos.x - puddles[pu].pos.x;
+                float dz = car->pos.z - puddles[pu].pos.z;
+                float r  = puddles[pu].radius + 0.4f;
+                if (dx*dx + dz*dz < r*r && fabsf(car->speed) > 3.0f) {
+                    if (GetRandomValue(0, 1) == 0) {
+                        Vector3 sp = {
+                            car->pos.x + ((float)GetRandomValue(-40,40))/100.0f,
+                            puddles[pu].pos.y + 0.1f,
+                            car->pos.z + ((float)GetRandomValue(-40,40))/100.0f,
+                        };
+                        SpawnDust(sp, (Color){130, 180, 220, 180});
+                    }
+                }
+            }
+
+            // Crashable prop collision — crates and fences splinter
+            // on contact and barely slow the car (they're meant to
+            // feel like debris, not walls).
+            for (int pi = 0; pi < numProps; pi++) {
+                Prop *pr = &props[pi];
+                if (!pr->alive) continue;
+                float dx = car->pos.x - pr->pos.x;
+                float dz = car->pos.z - pr->pos.z;
+                float hitR = (pr->type == PROP_FENCE) ? 1.1f : 0.55f;
+                if (dx*dx + dz*dz < (hitR + 0.4f) * (hitR + 0.4f)) {
+                    pr->alive = false;
+                    car->speed *= (pr->type == PROP_FENCE) ? 0.90f : 0.82f;
+                    // Debris puff: brown for crates, lighter for fences.
+                    Color debris = (pr->type == PROP_FENCE)
+                        ? (Color){200, 200, 200, 180}
+                        : (Color){150, 100,  60, 180};
+                    for (int k = 0; k < 6; k++) {
+                        SpawnDust((Vector3){pr->pos.x, pr->pos.y + 0.3f, pr->pos.z}, debris);
+                    }
+                }
+            }
+
             // Waypoint progression
             float wpDist = Vector3Distance(car->pos, trackPts[car->nextWP]);
             if (wpDist < 10.0f) {
@@ -1034,6 +1152,19 @@ moveCar:;
 
             // Buildings
             for (int i = 0; i < numBuildings; i++) DrawBuilding(&buildings[i]);
+
+            // Crashable props (fences + crates)
+            for (int i = 0; i < numProps; i++) DrawProp(&props[i]);
+
+            // Puddles (flat blue discs flush with the road)
+            for (int i = 0; i < numPuddles; i++) {
+                Vector3 a = puddles[i].pos;
+                Vector3 b = (Vector3){ a.x, a.y + 0.005f, a.z };
+                DrawCylinderEx(a, b, puddles[i].radius, puddles[i].radius, 14,
+                               (Color){40, 90, 140, 200});
+                DrawCylinderWiresEx(a, b, puddles[i].radius, puddles[i].radius, 14,
+                                    (Color){80, 140, 190, 200});
+            }
 
             // Trees
             for (int i = 0; i < numTrees; i++) DrawTree(treePosns[i], treeSizes[i]);
