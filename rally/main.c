@@ -560,6 +560,7 @@ int main(void) {
     float lapTimer = 0;
     float raceTimer = 0;
     float splitTimes[TOTAL_LAPS] = {0};
+    float finishCinTime = 0.0f;  // seconds since player crossed finish line
 
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
@@ -847,7 +848,44 @@ moveCar:;
             if (CarProgress(&cars[i]) > CarProgress(&cars[0])) playerRank++;
 
         // --- Camera ---
-        {
+        if (cars[0].finished) {
+            finishCinTime += dt;
+            Car *p = &cars[0];
+            float t = finishCinTime;
+
+            // Stage 1 (0 – 3s): ease a 180° orbit around the car.
+            // Stage 2 (3 – 6s): rise up and pull back into the sky.
+            float orbitDur = 3.0f;
+            float riseDur  = 3.0f;
+            float dist   = 6.0f;
+            float height = 2.5f;
+
+            float u;
+            if (t < orbitDur)        u = t / orbitDur;
+            else                     u = 1.0f;
+            u = u * u * (3.0f - 2.0f * u);      // smoothstep ease
+            float orbitAngle = u * PI;           // 0 (behind) → π (in front)
+
+            if (t > orbitDur) {
+                float r = (t - orbitDur) / riseDur;
+                if (r > 1.0f) r = 1.0f;
+                r = r * r * (3.0f - 2.0f * r);
+                height += r * 55.0f;
+                dist   += r * 20.0f;
+            }
+
+            float theta = p->rotation + PI + orbitAngle;
+            Vector3 camPos = {
+                p->pos.x + sinf(theta) * dist,
+                p->pos.y + height,
+                p->pos.z + cosf(theta) * dist
+            };
+            Vector3 camTarget = { p->pos.x, p->pos.y + 0.8f, p->pos.z };
+            // Ease into the cinematic from whatever the follow-cam had.
+            camera.position = Vector3Lerp(camera.position, camPos,    6.0f * dt);
+            camera.target   = Vector3Lerp(camera.target,   camTarget, 6.0f * dt);
+            camera.fovy    += (52.0f - camera.fovy) * 3.0f * dt;
+        } else {
             Car *p = &cars[0];
             float cs = cosf(p->rotation), sn = sinf(p->rotation);
             float speedPct = Clamp(fabsf(p->speed) / CAR_MAX_SPEED, 0, 1.2f);
