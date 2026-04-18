@@ -1671,6 +1671,35 @@ moveCar:;
                 }
                 DrawLineEx(a, b, 3.0f, lineCol);
             }
+            // Checkpoint markers — small diamonds along the track. The
+            // next-expected one pulses orange so you can see where to go.
+            for (int i = 0; i < NUM_CHECKPOINTS; i++) {
+                int seg = CHECKPOINT_SEGS[i];
+                float mx = cx + (trackPts[seg].x - centerX) * mmScale;
+                float mz = cy + (trackPts[seg].z - centerZ) * mmScale;
+                bool isNext = (i == cpNextIdx);
+                float r = isNext ? (3.5f + sinf(raceTimer * 6.0f) * 1.0f) : 2.5f;
+                Color c = isNext ? (Color){255, 170, 60, 255}
+                                 : (Color){200, 200, 210, 220};
+                // Diamond: rotated square via 4 triangles.
+                Vector2 top = {mx, mz - r}, bot = {mx, mz + r};
+                Vector2 lft = {mx - r, mz}, rgt = {mx + r, mz};
+                DrawTriangle(top, lft, bot, c);
+                DrawTriangle(top, bot, rgt, c);
+                if (isNext) DrawCircleLines(mx, mz, r + 2.0f, c);
+            }
+
+            // Finish line marker — checkered flag-style dot at seg 0.
+            {
+                float mx = cx + (trackPts[0].x - centerX) * mmScale;
+                float mz = cy + (trackPts[0].z - centerZ) * mmScale;
+                DrawRectangle((int)(mx - 4), (int)(mz - 4), 4, 4, WHITE);
+                DrawRectangle((int)mx,       (int)(mz - 4), 4, 4, BLACK);
+                DrawRectangle((int)(mx - 4), (int)mz,       4, 4, BLACK);
+                DrawRectangle((int)mx,       (int)mz,       4, 4, WHITE);
+                DrawRectangleLines((int)(mx - 4), (int)(mz - 4), 8, 8, (Color){255, 220, 80, 255});
+            }
+
             for (int ci = 0; ci < NUM_CARS; ci++) {
                 float mx = cx + (cars[ci].pos.x - centerX) * mmScale;
                 float mz = cy + (cars[ci].pos.z - centerZ) * mmScale;
