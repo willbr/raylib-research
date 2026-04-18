@@ -115,6 +115,11 @@ static Vector3 treePosns[MAX_TREES];
 static float treeSizes[MAX_TREES];
 static int numTrees = 0;
 
+// Tree model parts loaded from objects/pine_tree.obj3d at startup.
+// Scaled per-instance in DrawTree; DrawObject3DScaled handles the rest.
+static Part treeParts[16];
+static int  treePartCount = 0;
+
 #define MAX_BUILDINGS 28
 typedef struct { Vector3 pos; Vector3 size; float rotY; Color wall, roof; } Building;
 static Building buildings[MAX_BUILDINGS];
@@ -678,17 +683,11 @@ void DrawBuilding(const Building *b) {
 }
 
 void DrawTree(Vector3 pos, float size) {
-    // Trunk
-    DrawCylinderEx(pos, (Vector3){pos.x, pos.y + size * 2.5f, pos.z},
-        size * 0.15f, size * 0.1f, 6, (Color){90, 65, 35, 255});
-    // Canopy layers
-    for (int i = 0; i < 3; i++) {
-        float y = pos.y + size * (1.2f + i * 0.7f);
-        float r = size * (1.0f - i * 0.25f);
-        DrawCylinderEx((Vector3){pos.x, y, pos.z},
-            (Vector3){pos.x, y + r * 0.7f, pos.z},
-            r, 0.05f, 8, (Color){30, 80 + i * 20, 30, 255});
-    }
+    // Model loaded from objects/pine_tree.obj3d — drawn uniformly scaled
+    // per-instance so we still get size variation without baking the
+    // geometry into the game source.
+    DrawObject3DScaled(treeParts, treePartCount, pos, 0.0f,
+                       (Vector3){size, size, size});
 }
 
 // --- Arcade HUD text helpers ---
@@ -853,6 +852,18 @@ int main(void) {
     RenderTexture2D mirrorRT = LoadRenderTexture(860, 200);
     SetTextureFilter(mirrorRT.texture, TEXTURE_FILTER_BILINEAR);
     NUM_CARS_RENDER = NUM_CARS;
+
+    // Load the tree model. Fallback mirrors the on-disk pine_tree.obj3d
+    // so a missing file auto-regenerates one.
+    Part treeFallback[] = {
+        CYL(0, 0,   0,  0.12f, 1.5f,         COL( 90, 65, 35, 255)),
+        CONE(0, 1.0f, 0,  1.0f,  1.0f, 0.05f, COL( 30, 80, 30, 255)),
+        CONE(0, 1.6f, 0,  0.8f,  0.9f, 0.05f, COL( 30,100, 30, 255)),
+        CONE(0, 2.2f, 0,  0.6f,  0.8f, 0.0f,  COL( 30,120, 30, 255)),
+    };
+    LoadOrCreateObject("objects/pine_tree.obj3d", treeParts, &treePartCount,
+                       treeFallback,
+                       (int)(sizeof(treeFallback) / sizeof(treeFallback[0])));
 
     GenerateTrack();
 
