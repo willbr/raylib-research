@@ -148,8 +148,10 @@ static int numFans = 0;
 
 // Checkpoint gates — drawn as arches across the road at fixed segments.
 // Crossing one banks a split time for the current lap.
-#define NUM_CHECKPOINTS 3
-static const int CHECKPOINT_SEGS[NUM_CHECKPOINTS] = { 16, 32, 48 };
+#define NUM_CHECKPOINTS 9
+static const int CHECKPOINT_SEGS[NUM_CHECKPOINTS] = {
+    7, 14, 21, 28, 35, 42, 49, 56, 62
+};
 static float cpSplitTimes[NUM_CHECKPOINTS] = {0};
 static int cpNextIdx = 0;
 static float cpFlashTimer = 0.0f;
@@ -1582,6 +1584,25 @@ moveCar:;
             int bestTotalW = bestLabelW + bestNumW;
             ArcText    ("BEST ",    sw - bestTotalW - 30,            228, 24, YELLOW);
             ArcTextMono(bestNumTxt, sw - bestNumW - 30,              228, 24, YELLOW);
+        }
+
+        // Checkpoint progress for this lap (e.g. "CHECKPOINT 4/9"). While
+        // the flash banner is up we show the number just passed; otherwise
+        // show how many have been banked so far on the current lap.
+        {
+            int cpShown = (cpFlashTimer > 0.0f && cpNextIdx == 0)
+                          ? NUM_CHECKPOINTS
+                          : cpNextIdx;
+            const char *cpLabel = "CHECKPOINT ";
+            const char *cpNum   = TextFormat("%d/%d", cpShown, NUM_CHECKPOINTS);
+            int cpLabelW = MeasureText(cpLabel, 24);
+            int cpNumW   = ArcMonoWidth(cpNum, 24);
+            int cpTotalW = cpLabelW + cpNumW;
+            Color cpCol = (cpShown == NUM_CHECKPOINTS)
+                          ? (Color){120, 230, 140, 255}
+                          : (Color){200, 220, 230, 255};
+            ArcText    (cpLabel, sw - cpTotalW - 30, 258, 24, cpCol);
+            ArcTextMono(cpNum,   sw - cpNumW  - 30,  258, 24, cpCol);
         }
 
         // Drift indicator (top-center)
