@@ -4,37 +4,44 @@ const projects = .{ "fps", "rally", "3rd-person", "rts", "soccer", "kart", "plat
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{});
+    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseFast });
 
     const build_all_step = b.step("all", "Build all projects");
 
     inline for (projects) |name| {
-        const exe = b.addExecutable(.{
-            .name = name,
+        const mod = b.createModule(.{
             .target = target,
             .optimize = optimize,
+            .link_libc = true,
         });
 
-        exe.addCSourceFile(.{
+        mod.addCSourceFile(.{
             .file = b.path(name ++ "/main.c"),
             .flags = &.{"-std=c99"},
         });
 
-        exe.linkSystemLibrary("raylib");
-        exe.linkLibC();
+        mod.linkSystemLibrary("raylib", .{});
 
         // Platform-specific frameworks/libraries
-        if (exe.rootModuleTarget().os.tag == .macos) {
-            exe.linkFramework("OpenGL");
-            exe.linkFramework("Cocoa");
-            exe.linkFramework("IOKit");
-            exe.linkFramework("CoreVideo");
-        } else if (exe.rootModuleTarget().os.tag == .windows) {
-            exe.linkSystemLibrary("gdi32");
-            exe.linkSystemLibrary("winmm");
-            exe.linkSystemLibrary("user32");
-            exe.linkSystemLibrary("shell32");
+        if (target.result.os.tag == .macos) {
+            mod.linkFramework("OpenGL", .{});
+            mod.linkFramework("Cocoa", .{});
+            mod.linkFramework("IOKit", .{});
+            mod.linkFramework("CoreVideo", .{});
+        } else if (target.result.os.tag == .windows) {
+            const vcpkg_root = "C:/Users/wjbr/scoop/apps/vcpkg/current/installed/x64-windows";
+            mod.addIncludePath(.{ .cwd_relative = vcpkg_root ++ "/include" });
+            mod.addLibraryPath(.{ .cwd_relative = vcpkg_root ++ "/lib" });
+            mod.linkSystemLibrary("gdi32", .{});
+            mod.linkSystemLibrary("winmm", .{});
+            mod.linkSystemLibrary("user32", .{});
+            mod.linkSystemLibrary("shell32", .{});
         }
+
+        const exe = b.addExecutable(.{
+            .name = name,
+            .root_module = mod,
+        });
 
         const install = b.addInstallArtifact(exe, .{});
         build_all_step.dependOn(&install.step);
@@ -46,6 +53,9 @@ pub fn build(b: *std.Build) void {
         // Per-project run step: zig build run-fps, zig build run-rally, etc.
         const run_cmd = b.addRunArtifact(exe);
         run_cmd.step.dependOn(b.getInstallStep());
+        if (target.result.os.tag == .windows) {
+            run_cmd.addPathDir("C:/Users/wjbr/scoop/apps/vcpkg/current/installed/x64-windows/bin");
+        }
         if (b.args) |args| run_cmd.addArgs(args);
 
         const run_step = b.step("run-" ++ name, "Run " ++ name);
