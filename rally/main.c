@@ -1200,9 +1200,11 @@ moveCar:;
                     if (dx > 0.001f) targetPitch = -atan2f(dy, dx);
                     // Weight transfer: throttle (accel > 0) squats the rear
                     // and lifts the nose (negative pitch); brake (accel < 0)
-                    // dives the nose (positive pitch). Only applied on the
-                    // ground where the weight can actually transfer.
-                    targetPitch -= accel * 0.0035f;
+                    // dives the nose (positive pitch). Small coefficient
+                    // — at 0.0035 the ~7° lift pulled the front wheels
+                    // visibly off the road because the model rotates
+                    // around the car's centre.
+                    targetPitch -= accel * 0.0012f;
                 }
 
                 // Underdamped spring integration. ~5 Hz natural frequency
