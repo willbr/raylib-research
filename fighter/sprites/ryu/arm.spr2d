@@ -1,0 +1,11 @@
+# Ryu arm - centered at 0,0 (shoulder top, fist bottom, ~26px tall)
+# White gi sleeve at top
+rect -6 -13 12 6  235 235 240 255
+# Skin arm
+rect -5 -7 10 14  220 185 145 255
+# Muscle line
+line 0 -5 0 5  200 168 128 255
+# White wrist wrap
+rect -5 5 10 4  245 245 250 255
+# Fist at bottom
+circle 0 13 5  220 185 145 255

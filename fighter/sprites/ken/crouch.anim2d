@@ -1,0 +1,13 @@
+# Ken crouch - squat down, everything shifted down
+loop false
+
+frame 0.1
+  leg_back -10 -10
+  shoe_back -10 -2
+  leg_front 10 -10
+  shoe_front 10 -2
+  torso 0 -32
+  arm_back -18 -32
+  arm_front 18 -32
+  head 0 -57
+  hurtbox -18 -78 36 78

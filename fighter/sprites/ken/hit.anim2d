@@ -1,0 +1,26 @@
+# Ken hit - lean back, arms flung
+loop false
+
+# Impact
+frame 0.12
+  leg_back -6 -15
+  shoe_back -6 -2
+  leg_front 10 -15
+  shoe_front 10 -2
+  torso -6 -44
+  arm_back -24 -42
+  arm_front 8 -42
+  head -8 -73
+  hurtbox -16 -94 36 94
+
+# Recoil
+frame 0.15
+  leg_back -4 -15
+  shoe_back -4 -2
+  leg_front 10 -15
+  shoe_front 10 -2
+  torso -4 -45
+  arm_back -22 -44
+  arm_front 10 -44
+  head -4 -74
+  hurtbox -16 -95 36 95

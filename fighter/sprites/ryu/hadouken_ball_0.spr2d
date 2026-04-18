@@ -1,0 +1,14 @@
+# Hadouken projectile frame 0 - blue energy ball (compact)
+duration 0.08
+# outer glow
+circle 0 0 14  40 100 220 120
+# mid ring
+circle 0 0 10  80 160 255 180
+# inner bright
+circle 0 0 7  140 210 255 220
+# core white
+circle 0 0 4  220 240 255 255
+# sparks
+circle 10 -4 2  180 220 255 200
+circle -8 5 2  180 220 255 200
+circle 6 8 2  160 200 255 180

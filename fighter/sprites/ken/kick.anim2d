@@ -1,0 +1,39 @@
+# Ken kick - front leg extends forward
+loop false
+
+# Raise leg
+frame 0.06
+  leg_back -8 -15
+  shoe_back -8 -2
+  leg_front 8 -22
+  shoe_front 10 -16
+  torso -2 -45
+  arm_back -18 -45
+  arm_front 18 -45
+  head -1 -75
+  hurtbox -16 -96 32 96
+
+# Extend kick
+frame 0.10
+  leg_back -10 -15
+  shoe_back -10 -2
+  leg_front 20 -18
+  shoe_front 36 -14
+  torso -4 -45
+  arm_back -20 -45
+  arm_front 14 -45
+  head -2 -75
+  hurtbox -18 -96 36 96
+  hitbox 25 -22 28 14
+
+# Recover
+frame 0.10
+  leg_back -8 -15
+  shoe_back -8 -2
+  leg_front 8 -15
+  shoe_front 8 -2
+  torso 0 -45
+  arm_back -18 -45
+  arm_front 18 -45
+  head 0 -75
+  hurtbox -16 -96 32 96

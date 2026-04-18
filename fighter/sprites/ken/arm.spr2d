@@ -1,0 +1,11 @@
+# Ken arm - centered at 0,0 (shoulder top, fist bottom, ~26px tall)
+# Red gi sleeve at top
+rect -6 -13 12 6  200 45 45 255
+# Skin arm
+rect -5 -7 10 14  225 190 150 255
+# Muscle line
+line 0 -5 0 5  205 172 132 255
+# White wrist wrap
+rect -5 5 10 4  245 245 250 255
+# Fist at bottom
+circle 0 13 5  225 190 150 255

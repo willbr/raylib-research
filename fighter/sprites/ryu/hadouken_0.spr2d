@@ -1,0 +1,67 @@
+# Ryu hadouken frame 0 - windup, hands cupping energy at hip
+duration 0.12
+hurtbox -16 -88 32 88
+# back shoe planted wide
+rect -18 -6 12 6  70 50 30 255
+ellipse -12 -6 6 3  70 50 30 255
+# front shoe
+rect 6 -6 12 6  70 50 30 255
+ellipse 12 -6 6 3  70 50 30 255
+# back leg braced
+rect -16 -6 11 24  55 55 75 255
+line -11 -2 -11 16  45 45 65 255
+rect -15 18 11 14  55 55 75 255
+# front leg braced
+rect 5 -6 11 24  55 55 75 255
+line 10 -2 10 16  45 45 65 255
+rect 6 18 11 14  55 55 75 255
+# belt
+rect -17 -30 30 5  60 45 25 255
+ellipse 0 -28 4 3  50 38 20 255
+# torso rotated back
+rect -17 -52 30 24  235 235 240 255
+tri -2 -52  -8 -40  4 -40  220 185 145 255
+line -10 -48 -6 -32  215 215 220 255
+line 6 -48 2 -32  215 215 220 255
+# both arms pulled to right hip (cupping energy)
+# back arm pulled to hip
+rect -26 -40 10 18  220 185 145 255
+line -21 -36 -21 -26  200 168 128 255
+rect -26 -46 10 6  235 235 240 255
+rect -26 -24 10 4  245 245 250 255
+# front arm pulled to hip
+rect -16 -38 10 18  220 185 145 255
+line -11 -34 -11 -24  200 168 128 255
+rect -16 -44 10 6  235 235 240 255
+rect -16 -22 10 4  245 245 250 255
+# cupped hands around energy
+circle -18 -22 5  220 185 145 255
+circle -14 -22 5  220 185 145 255
+# energy glow building between hands
+circle -16 -22 6  100 180 255 140
+circle -16 -22 4  160 210 255 180
+circle -16 -22 2  220 240 255 220
+# neck
+rect -5 -56 8 6  220 185 145 255
+# head
+ellipse -1 -66 11 12  220 185 145 255
+circle -11 -64 3  210 175 135 255
+# headband
+rect -13 -72 24 4  200 40 40 255
+line -13 -72 -21 -68  200 40 40 255
+line -13 -70 -23 -66  200 40 40 255
+# hair
+ellipse -1 -76 12 7  40 30 20 255
+tri -7 -78  -11 -82  -3 -88  40 30 20 255
+tri -1 -78  -5 -84  3 -90  40 30 20 255
+tri 5 -78  1 -84  9 -86  40 30 20 255
+# eyes intense
+circle -5 -66 3  255 255 255 255
+circle 5 -66 3  255 255 255 255
+circle -4 -66 2  30 20 10 255
+circle 6 -66 2  30 20 10 255
+# eyebrows intense
+line -8 -72 -2 -70  40 30 20 255
+line 2 -70 8 -72  40 30 20 255
+# mouth concentrating
+line -3 -60 2 -60  140 80 60 255

@@ -1,0 +1,13 @@
+# Ken block - arms crossed in front
+loop false
+
+frame 0.1
+  leg_back -8 -15
+  shoe_back -8 -2
+  leg_front 6 -15
+  shoe_front 6 -2
+  torso -2 -45
+  arm_back 4 -47
+  arm_front 6 -45
+  head -1 -75
+  hurtbox -16 -96 30 96

@@ -49,3 +49,38 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Zig build
+zig-out/
+zig-cache/
+.zig-cache/
+
+# macOS executables (no extension)
+fps/fps
+rally/rally
+3rd-person/3rd-person
+rts/rts
+soccer/soccer
+kart/kart
+platformer/platformer
+zelda/zelda
+micromachines/micromachines
+skate/skate
+resi/resi
+wipeout/wipeout
+editor/editor
+snowboard/snowboard
+rpgbattle/rpgbattle
+biplane/biplane
+goldensun/goldensun
+starfox/starfox
+boat/boat
+pokemon/pokemon
+fighter/fighter
+
+# Editor temp files
+editor_state.txt
+editor_build3d.obj3d
+editor_build2d.spr2d
+editor_placed.txt
+map.m3d

@@ -1,0 +1,26 @@
+# Ken jump - rising tucked, falling extended
+loop false
+
+# Rising - tucked pose
+frame 0.2
+  leg_back -8 -15
+  shoe_back -6 -10
+  leg_front 8 -15
+  shoe_front 6 -10
+  torso 0 -38
+  arm_back -16 -38
+  arm_front 16 -38
+  head 0 -63
+  hurtbox -16 -84 32 84
+
+# Falling - extended pose
+frame 0.3
+  leg_back -10 -18
+  shoe_back -12 -4
+  leg_front 10 -18
+  shoe_front 12 -4
+  torso 0 -47
+  arm_back -20 -47
+  arm_front 20 -47
+  head 0 -77
+  hurtbox -20 -98 40 98

@@ -1,0 +1,24 @@
+# Ryu walk - stepping forward
+loop true
+
+frame 0.12
+  leg_back -10 -15
+  shoe_back -10 -2
+  leg_front 12 -15
+  shoe_front 14 -2
+  torso 0 -45
+  arm_back -16 -45
+  arm_front 16 -48
+  head 0 -75
+  hurtbox -16 -96 32 96
+
+frame 0.12
+  leg_back 8 -15
+  shoe_back 10 -2
+  leg_front -4 -15
+  shoe_front -6 -2
+  torso 0 -45
+  arm_back -16 -48
+  arm_front 16 -45
+  head 0 -75
+  hurtbox -16 -96 32 96

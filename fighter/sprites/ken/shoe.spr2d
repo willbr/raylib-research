@@ -1,0 +1,5 @@
+# Ken shoe - centered at 0,0 (~6px tall)
+# Brown shoe body (same as Ryu)
+rect -6 -3 12 6  70 50 30 255
+# Rounded toe
+ellipse 0 -3 6 3  70 50 30 255

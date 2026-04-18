@@ -1,0 +1,13 @@
+# Ryu torso - centered at 0,0 (~30px tall)
+# White gi body
+rect -15 -13 30 26  235 235 240 255
+# V-neckline showing skin
+tri 0 -13 -6 -1 6 -1  220 185 145 255
+# Gi fold lines
+line -8 -9 -4 7  215 215 220 255
+line 8 -9 4 7  215 215 220 255
+line -10 1 10 1  215 215 220 255
+# Brown belt at bottom
+rect -15 11 30 5  60 45 25 255
+# Belt knot detail
+ellipse 2 13 4 3  50 38 20 255

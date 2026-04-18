@@ -1,0 +1,5 @@
+# Ken leg - centered at 0,0 (~28px tall)
+# Dark blue-gray pants (same as Ryu)
+rect -6 -14 12 28  55 55 75 255
+# Crease line
+line 0 -10 0 10  45 45 65 255

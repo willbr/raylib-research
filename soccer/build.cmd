@@ -5,7 +5,7 @@ set RAYLIB_INCLUDE=%USERPROFILE%\scoop\apps\vcpkg\current\installed\x64-windows\
 set RAYLIB_LIB=%USERPROFILE%\scoop\apps\vcpkg\current\installed\x64-windows\lib
 
 REM Compile and link using Zig
-zig cc main.c -o rally.exe ^
+zig cc main.c -o soccer.exe ^
   -I%RAYLIB_INCLUDE% ^
   -L%RAYLIB_LIB% ^
   -lraylib ^
@@ -19,5 +19,5 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b %ERRORLEVEL%
 )
 
-echo Build succeeded! Run rally.exe to play.
+echo Build succeeded! Run soccer.exe to play.
 endlocal

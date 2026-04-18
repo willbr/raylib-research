@@ -1,0 +1,8 @@
+# Player facing side (eye on right = faces right, mirror for left)
+ellipse 0.0 7.0 5.0 2.0  0 0 0 40
+rect 0.0 0.0 8.0 8.0  60 60 200 255
+circle 0.0 -4.0 5.0  240 200 170 255
+rect 0.0 -8.0 10.0 4.0  220 40 40 255
+circle 2.0 -4.0 1.0  0 0 0 255
+rect -2.0 6.0 3.0 3.0  60 60 200 255
+rect 2.0 6.0 3.0 3.0  60 60 200 255

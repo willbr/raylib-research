@@ -1,0 +1,11 @@
+# Ryu - Street Fighter puppet rig (sprite-per-part)
+# Draw order: back to front
+
+part leg_back leg.spr2d
+part shoe_back shoe.spr2d
+part leg_front leg.spr2d
+part shoe_front shoe.spr2d
+part torso torso.spr2d
+part arm_back arm.spr2d
+part arm_front arm.spr2d
+part head head.spr2d

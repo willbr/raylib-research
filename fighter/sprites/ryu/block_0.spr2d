@@ -1,0 +1,63 @@
+# Ryu block frame 0 - arms crossed guard stance
+duration 0.10
+hurtbox -14 -88 28 88
+# back shoe
+rect -14 -6 12 6  70 50 30 255
+ellipse -8 -6 6 3  70 50 30 255
+# front shoe closer
+rect 2 -6 12 6  70 50 30 255
+ellipse 8 -6 6 3  70 50 30 255
+# back leg braced
+rect -13 -6 11 24  55 55 75 255
+line -8 -2 -8 16  45 45 65 255
+rect -12 18 11 14  55 55 75 255
+# front leg braced
+rect 1 -6 11 24  55 55 75 255
+line 6 -2 6 16  45 45 65 255
+rect 2 18 11 14  55 55 75 255
+# belt
+rect -15 -30 28 5  60 45 25 255
+ellipse 0 -28 4 3  50 38 20 255
+# torso slightly turned inward
+rect -15 -52 28 24  235 235 240 255
+tri -2 -52  -8 -40  4 -40  220 185 145 255
+line -8 -48 -4 -32  215 215 220 255
+line 6 -48 2 -32  215 215 220 255
+# rear arm crossed guard (behind)
+rect -20 -56 10 24  220 185 145 255
+line -15 -52 -15 -38  200 168 128 255
+rect -20 -56 10 6  235 235 240 255
+rect -20 -34 10 4  245 245 250 255
+# rear fist guarding face
+circle -15 -56 5  220 185 145 255
+# front arm crossed guard (in front, crossing body)
+rect 8 -58 10 26  220 185 145 255
+line 13 -54 13 -38  200 168 128 255
+rect 8 -56 10 6  235 235 240 255
+rect 8 -34 10 4  245 245 250 255
+# front fist guarding face
+circle 13 -58 5  220 185 145 255
+# neck tucked
+rect -4 -56 8 5  220 185 145 255
+# head tucked behind guard
+ellipse 0 -66 11 12  220 185 145 255
+circle -10 -64 3  210 175 135 255
+# headband
+rect -12 -72 24 4  200 40 40 255
+line -12 -72 -20 -68  200 40 40 255
+line -12 -70 -22 -66  200 40 40 255
+# hair
+ellipse 0 -76 12 7  40 30 20 255
+tri -6 -78  -10 -82  -2 -88  40 30 20 255
+tri 0 -78  -4 -84  4 -90  40 30 20 255
+tri 6 -78  2 -84  10 -86  40 30 20 255
+# eyes peering over guard
+circle -4 -66 3  255 255 255 255
+circle 6 -66 3  255 255 255 255
+circle -3 -66 2  30 20 10 255
+circle 7 -66 2  30 20 10 255
+# eyebrows focused
+line -7 -71 -1 -70  40 30 20 255
+line 3 -70 9 -71  40 30 20 255
+# mouth clenched
+line -2 -60 3 -60  140 80 60 255

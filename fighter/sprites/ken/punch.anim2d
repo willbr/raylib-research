@@ -1,0 +1,39 @@
+# Ken punch - front arm extends forward
+loop false
+
+# Windup - pull arm back
+frame 0.06
+  leg_back -8 -15
+  shoe_back -8 -2
+  leg_front 8 -15
+  shoe_front 8 -2
+  torso -2 -45
+  arm_back -18 -45
+  arm_front 10 -45
+  head -1 -75
+  hurtbox -16 -96 32 96
+
+# Extend - arm punches forward
+frame 0.08
+  leg_back -8 -15
+  shoe_back -8 -2
+  leg_front 8 -15
+  shoe_front 8 -2
+  torso 2 -45
+  arm_back -18 -45
+  arm_front 34 -48
+  head 1 -75
+  hurtbox -16 -96 32 96
+  hitbox 30 -55 24 14
+
+# Recover - return to stance
+frame 0.10
+  leg_back -8 -15
+  shoe_back -8 -2
+  leg_front 8 -15
+  shoe_front 8 -2
+  torso 0 -45
+  arm_back -18 -45
+  arm_front 18 -45
+  head 0 -75
+  hurtbox -16 -96 32 96

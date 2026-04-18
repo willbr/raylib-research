@@ -1,0 +1,29 @@
+# Ryu head - centered at 0,0 (~24px tall)
+# Neck stub at bottom
+rect -4 8 8 6  220 185 145 255
+# Face (skin)
+ellipse 0 0 11 12  220 185 145 255
+# Ear
+circle -10 2 3  210 175 135 255
+# Headband (red)
+rect -12 -6 24 4  200 40 40 255
+# Headband tail (trailing left)
+line -12 -6 -20 -2  200 40 40 255
+line -12 -4 -22 0  200 40 40 255
+# Hair base (dark brown)
+ellipse 0 -10 12 7  40 30 20 255
+# Hair spikes (triangles pointing up)
+tri -6 -12 -10 -16 -2 -22  40 30 20 255
+tri 0 -12 -4 -18 4 -24  40 30 20 255
+tri 6 -12 2 -18 10 -20  40 30 20 255
+# Eyes - white
+circle -4 0 3  255 255 255 255
+circle 6 0 3  255 255 255 255
+# Pupils
+circle -3 0 2  30 20 10 255
+circle 7 0 2  30 20 10 255
+# Eyebrows (angled/determined)
+line -7 -5 -1 -4  40 30 20 255
+line 3 -4 9 -5  40 30 20 255
+# Mouth
+line -2 6 3 6  160 100 80 255

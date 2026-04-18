@@ -1,0 +1,59 @@
+# Ryu hit frame 1 - deeper recoil
+duration 0.15
+hurtbox -20 -86 36 86
+# back shoe further back
+rect -22 -6 12 6  70 50 30 255
+ellipse -16 -6 6 3  70 50 30 255
+# front shoe
+rect -2 -6 12 6  70 50 30 255
+ellipse 4 -6 6 3  70 50 30 255
+# back leg bent back
+rect -20 -6 11 24  55 55 75 255
+line -15 -2 -15 16  45 45 65 255
+rect -18 18 11 14  55 55 75 255
+# front leg
+rect -3 -6 11 24  55 55 75 255
+line 2 -2 2 16  45 45 65 255
+rect -2 18 11 14  55 55 75 255
+# belt
+rect -22 -28 30 5  60 45 25 255
+ellipse -5 -26 4 3  50 38 20 255
+# torso bent further back
+rect -22 -50 28 24  235 235 240 255
+tri -7 -50  -13 -38  -1 -38  220 185 145 255
+line -15 -46 -11 -30  215 215 220 255
+line 1 -46 -3 -30  215 215 220 255
+# back arm flung wide
+rect -32 -40 10 16  220 185 145 255
+line -27 -36 -27 -28  200 168 128 255
+rect -32 -46 10 6  235 235 240 255
+rect -32 -26 10 4  245 245 250 255
+circle -27 -22 5  220 185 145 255
+# front arm flung
+rect 4 -40 10 16  220 185 145 255
+line 9 -36 9 -28  200 168 128 255
+rect 4 -46 10 6  235 235 240 255
+rect 4 -26 10 4  245 245 250 255
+circle 9 -22 5  220 185 145 255
+# neck
+rect -12 -54 8 6  220 185 145 255
+# head recoiling more
+ellipse -8 -64 11 12  220 185 145 255
+circle -18 -62 3  210 175 135 255
+# headband
+rect -20 -70 24 4  200 40 40 255
+line -20 -70 -28 -66  200 40 40 255
+line -20 -68 -30 -64  200 40 40 255
+# hair
+ellipse -8 -74 12 7  40 30 20 255
+tri -14 -76  -18 -80  -10 -86  40 30 20 255
+tri -8 -76  -12 -82  -4 -88  40 30 20 255
+tri -2 -76  -6 -82  2 -84  40 30 20 255
+# eyes shut in pain
+line -12 -64 -6 -64  40 30 20 255
+line -2 -64 4 -64  40 30 20 255
+# eyebrows
+line -12 -68 -6 -67  40 30 20 255
+line -2 -67 4 -68  40 30 20 255
+# mouth wide open
+ellipse -5 -57 4 4  140 60 50 255

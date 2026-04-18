@@ -1,0 +1,25 @@
+# Ken head - centered at 0,0 (~24px tall)
+# Neck stub at bottom
+rect -4 8 8 6  225 190 150 255
+# Face (tan skin)
+ellipse 0 0 11 12  225 190 150 255
+# Ear
+circle -10 2 3  215 180 140 255
+# Hair base (blonde, swept back, bigger than Ryu's)
+ellipse 0 -10 14 9  230 200 80 255
+# Hair spikes (4 blonde spikes)
+tri -8 -12 -12 -18 -4 -24  230 200 80 255
+tri -2 -12 -6 -18 2 -24  230 200 80 255
+tri 4 -12 0 -18 8 -22  230 200 80 255
+tri 10 -12 6 -16 14 -20  230 200 80 255
+# Eyes - white
+circle -4 0 3  255 255 255 255
+circle 6 0 3  255 255 255 255
+# Pupils
+circle -3 0 2  40 30 20 255
+circle 7 0 2  40 30 20 255
+# Eyebrows (confident, slightly raised)
+line -7 -5 -1 -5  60 40 20 255
+line 3 -5 9 -5  60 40 20 255
+# Mouth (confident smirk)
+line -2 6 4 5  180 120 100 255

@@ -1,0 +1,38 @@
+# Ken hadouken - pull back, release forward, recover
+loop false
+
+# Windup - pull hands back
+frame 0.12
+  leg_back -10 -15
+  shoe_back -10 -2
+  leg_front 8 -15
+  shoe_front 8 -2
+  torso -4 -45
+  arm_back -12 -42
+  arm_front -6 -42
+  head -2 -75
+  hurtbox -16 -96 32 96
+
+# Release - arms thrust forward
+frame 0.10
+  leg_back -10 -15
+  shoe_back -10 -2
+  leg_front 8 -15
+  shoe_front 8 -2
+  torso 2 -45
+  arm_back 24 -48
+  arm_front 28 -48
+  head 1 -75
+  hurtbox -16 -96 32 96
+
+# Recover
+frame 0.12
+  leg_back -8 -15
+  shoe_back -8 -2
+  leg_front 8 -15
+  shoe_front 8 -2
+  torso 0 -45
+  arm_back -18 -45
+  arm_front 18 -45
+  head 0 -75
+  hurtbox -16 -96 32 96
