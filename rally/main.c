@@ -900,10 +900,23 @@ int main(void) {
 
     // Chase-cam state: a lagged yaw the camera rotates with, and landing
     // feedback (shake + target-pitch drop).
-    float camYaw       = 0.0f;
-    bool  camYawInit   = false;
+    float camYaw       = cars[0].rotation;
+    bool  camYawInit   = true;
     float camShakeAmp  = 0.0f;
     float camPitchDrop = 0.0f;
+
+    // Seed the camera at its chase-cam target BEFORE the first frame so
+    // the Vector3Lerp doesn't slide it in from the origin.
+    {
+        Car *p = &cars[0];
+        float csn = cosf(camYaw), snn = sinf(camYaw);
+        camera.position = (Vector3){
+            p->pos.x - snn * 3.5f,
+            p->pos.y + 1.8f,
+            p->pos.z - csn * 3.5f
+        };
+        camera.target = (Vector3){ p->pos.x, p->pos.y + 1.0f, p->pos.z };
+    }
 
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
@@ -1440,8 +1453,8 @@ moveCar:;
             camYaw += yd * (1.0f - expf(-5.0f * dt));
 
             float speedPct = Clamp(fabsf(p->speed) / CAR_MAX_SPEED, 0, 1.2f);
-            float camDist = 5.5f;                         // fixed — FOV sells speed
-            float camH    = 2.4f - speedPct * 0.3f;
+            float camDist = 3.5f;                         // closer, still readable
+            float camH    = 1.8f - speedPct * 0.2f;
             float cs = cosf(camYaw), sn = sinf(camYaw);
             Vector3 camPos = {
                 p->pos.x - sn * camDist,
