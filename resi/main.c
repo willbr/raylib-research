@@ -13,6 +13,7 @@
 #define MAX_INV          8
 #define MAX_BULLETS     10
 #define MAX_WALLS       12
+#define MAX_CAMZONES     4
 
 // Physics
 #define PLAYER_SPEED    3.0f
@@ -53,6 +54,13 @@ typedef struct {
     Color color;
 } Wall;
 
+// Extra fixed camera for part of a room: used while the player stands in [min,max] (XZ)
+typedef struct {
+    float minX, minZ, maxX, maxZ;
+    Vector3 camPos, camTarget;
+    float camFov;
+} CamZone;
+
 typedef struct {
     Vector3 floorMin, floorMax;     // walkable rectangle
     float ceilHeight;
@@ -63,6 +71,8 @@ typedef struct {
     Vector3 camPos;
     Vector3 camTarget;
     float camFov;
+    CamZone camZones[MAX_CAMZONES]; // optional; first match wins, else the room camera above
+    int numCamZones;
     bool isDark;
 } Room;
 
@@ -166,6 +176,17 @@ int AddRoom(Vector3 fmin, Vector3 fmax, float ceil, Color floor, Color wall, Col
     return id;
 }
 
+void AddCamZone(int r, float minX, float minZ, float maxX, float maxZ,
+                Vector3 camP, Vector3 camT, float fov) {
+    if (rooms[r].numCamZones >= MAX_CAMZONES) return;
+    rooms[r].camZones[rooms[r].numCamZones++] =
+        (CamZone){ minX, minZ, maxX, maxZ, camP, camT, fov };
+}
+
+bool InCamZone(const CamZone *z, Vector3 p) {
+    return p.x >= z->minX && p.x <= z->maxX && p.z >= z->minZ && p.z <= z->maxZ;
+}
+
 void AddWall(int r, Vector3 pos, Vector3 size, Color c) {
     if (rooms[r].numWalls >= MAX_WALLS) return;
     Wall *w = &rooms[r].walls[rooms[r].numWalls++];
@@ -226,6 +247,11 @@ void BuildMansion(void) {
     // Pillars
     AddWall(r0, (Vector3){-4,1.5f,0}, (Vector3){0.3f,1.5f,0.3f}, wallBrown);
     AddWall(r0, (Vector3){ 4,1.5f,0}, (Vector3){0.3f,1.5f,0.3f}, wallBrown);
+    // Camera zones: the room camera (north, high) can't see past the staircase
+    // block, so the south end gets its own camera looking back north at the stairs.
+    // Zones overlap at z -4..-3 so the view doesn't flicker on the boundary.
+    AddCamZone(r0, -6, -8, 6, -3, (Vector3){0, 8, -12}, (Vector3){0, 0, 0}, 50);
+    AddCamZone(r0, -6, -4, 6,  8, (Vector3){0, 6, 11.5f}, (Vector3){0, 0, -2}, 55);
 
     // Room 1: Dining Room
     int r1 = AddRoom((Vector3){-5,0,-4}, (Vector3){5,0,4}, 3.5f,
@@ -238,11 +264,19 @@ void BuildMansion(void) {
     int r2 = AddRoom((Vector3){-1,0,-8}, (Vector3){1,0,8}, 3.0f,
         darkWood, wallBrown, ceilDark,
         (Vector3){4, 5, 0}, (Vector3){0, 0, 0}, 50, true);
+    // Camera zones: the side camera only covers the middle of the 16m corridor,
+    // so each half gets an end-on shot looking down the corridor instead.
+    AddCamZone(r2, -1, -8, 1, 0.5f, (Vector3){0, 4,  3}, (Vector3){0, 0, -4}, 55);
+    AddCamZone(r2, -1, -0.5f, 1, 8, (Vector3){0, 4, -3}, (Vector3){0, 0,  4}, 55);
 
     // Room 3: East Corridor
     int r3 = AddRoom((Vector3){-1,0,-8}, (Vector3){1,0,8}, 3.0f,
         darkWood, wallBrown, ceilDark,
         (Vector3){-4, 5, 0}, (Vector3){0, 0, 0}, 50, true);
+    // Camera zones: the side camera only covers the middle of the 16m corridor,
+    // so each half gets an end-on shot looking down the corridor instead.
+    AddCamZone(r3, -1, -8, 1, 0.5f, (Vector3){0, 4,  3}, (Vector3){0, 0, -4}, 55);
+    AddCamZone(r3, -1, -0.5f, 1, 8, (Vector3){0, 4, -3}, (Vector3){0, 0,  4}, 55);
 
     // Room 4: Library
     int r4 = AddRoom((Vector3){-4,0,-4}, (Vector3){4,0,4}, 3.5f,
@@ -264,7 +298,7 @@ void BuildMansion(void) {
     // Room 6: Storage
     int r6 = AddRoom((Vector3){-3,0,-2.5f}, (Vector3){3,0,2.5f}, 3.0f,
         stone, wallGrey, ceilGrey,
-        (Vector3){0, 6, -5}, (Vector3){0, 0, 0}, 50, true);
+        (Vector3){0, 9, -5}, (Vector3){0, 0, 0}, 50, true);   // high, so shelves don't hide the side aisles
     // Shelves
     AddWall(r6, (Vector3){-1.5f,1,0}, (Vector3){0.2f,1,1.8f}, (Color){80,70,60,255});
     AddWall(r6, (Vector3){ 1.5f,1,0}, (Vector3){0.2f,1,1.8f}, (Color){80,70,60,255});
@@ -282,6 +316,10 @@ void BuildMansion(void) {
         (Vector3){4, 4, -4}, (Vector3){0, 0, 0}, 55, true);
     // Stairwell block
     AddWall(r8, (Vector3){0.5f,1,1.5f}, (Vector3){0.8f,1,1.2f}, stone);
+    // Camera zones: the stairwell block hides the south-west corner from the
+    // room camera, so the south end gets a camera from the south wall.
+    AddCamZone(r8, -2.5f, -4, 2.5f, 0.5f, (Vector3){4, 4, -4}, (Vector3){0, 0, 0}, 55);
+    AddCamZone(r8, -2.5f, -0.5f, 2.5f, 4, (Vector3){0, 3, 7}, (Vector3){0, 0, 1}, 55);
 
     // Room 9: Lab
     int r9 = AddRoom((Vector3){-4,0,-4}, (Vector3){4,0,4}, 3.0f,
@@ -544,6 +582,7 @@ int main(void) {
     camera.up = (Vector3){0,1,0};
     camera.projection = CAMERA_PERSPECTIVE;
     camera.fovy = 50;
+    int camRoom = -1, camZone = -1;   // which room/zone camera is active
 
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
@@ -762,12 +801,31 @@ skip_input:
         }
 
 draw:
-        // Camera: lerp to room's fixed camera
+        // Camera: fixed per room, or per camera zone within the room.
+        // Between rooms it lerps (hidden by the door fade); between zones it
+        // hard-cuts. The current zone is kept while the player is still in it.
         {
             Room *r = &rooms[player.currentRoom];
-            camera.position = Vector3Lerp(camera.position, r->camPos, CAM_LERP * dt);
-            camera.target = Vector3Lerp(camera.target, r->camTarget, CAM_LERP * dt);
-            camera.fovy += (r->camFov - camera.fovy) * CAM_LERP * dt;
+            int zone = camZone;
+            if (camRoom != player.currentRoom ||
+                zone < 0 || zone >= r->numCamZones || !InCamZone(&r->camZones[zone], player.pos)) {
+                zone = -1;
+                for (int i = 0; i < r->numCamZones; i++)
+                    if (InCamZone(&r->camZones[i], player.pos)) { zone = i; break; }
+            }
+            Vector3 cp = r->camPos, ct = r->camTarget;
+            float cf = r->camFov;
+            if (zone >= 0) { cp = r->camZones[zone].camPos; ct = r->camZones[zone].camTarget; cf = r->camZones[zone].camFov; }
+
+            if (camRoom == player.currentRoom && zone != camZone) {
+                camera.position = cp; camera.target = ct; camera.fovy = cf;
+            } else {
+                camera.position = Vector3Lerp(camera.position, cp, CAM_LERP * dt);
+                camera.target = Vector3Lerp(camera.target, ct, CAM_LERP * dt);
+                camera.fovy += (cf - camera.fovy) * CAM_LERP * dt;
+            }
+            camRoom = player.currentRoom;
+            camZone = zone;
         }
 
         BeginDrawing();
@@ -821,9 +879,11 @@ draw:
 
         // Darkness vignette for dark rooms
         if (rooms[player.currentRoom].isDark) {
-            // Central light spot: clear in the middle, fading to dark at its rim,
-            // then solid dark from the rim out past the screen corners.
-            Vector2 center = { sw/2.0f, sh/2.0f };
+            // Light spot around the player (fixed cameras mean they're rarely
+            // mid-screen): clear in the middle, fading to dark at its rim, then
+            // solid dark from the rim out past the screen corners.
+            Vector2 center = GetWorldToScreen(
+                (Vector3){ player.pos.x, player.pos.y + 0.9f, player.pos.z }, camera);
             float lightR = (float)(sw < sh ? sw : sh) * 0.35f;
             float farR = sqrtf((float)(sw*sw + sh*sh));
             Color dark = (Color){0,0,0,200};
