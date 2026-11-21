@@ -821,10 +821,14 @@ draw:
 
         // Darkness vignette for dark rooms
         if (rooms[player.currentRoom].isDark) {
-            DrawRectangle(0, 0, sw, sh, (Color){0,0,0,140});
-            // Central light spot
-            DrawCircleGradient((Vector2){ sw/2.0f, sh/2.0f }, (float)(sw < sh ? sw : sh) * 0.35f,
-                (Color){0,0,0,0}, (Color){0,0,0,0});
+            // Central light spot: clear in the middle, fading to dark at its rim,
+            // then solid dark from the rim out past the screen corners.
+            Vector2 center = { sw/2.0f, sh/2.0f };
+            float lightR = (float)(sw < sh ? sw : sh) * 0.35f;
+            float farR = sqrtf((float)(sw*sw + sh*sh));
+            Color dark = (Color){0,0,0,200};
+            DrawCircleGradient(center, lightR, (Color){0,0,0,0}, dark);
+            DrawRing(center, lightR, farR, 0.0f, 360.0f, 64, dark);
         }
 
         DrawHUD();
