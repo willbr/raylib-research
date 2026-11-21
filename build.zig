@@ -54,9 +54,17 @@ pub fn build(b: *std.Build) void {
         const run_cmd = b.addRunArtifact(exe);
         run_cmd.step.dependOn(b.getInstallStep());
         if (target.result.os.tag == .windows) {
-            run_cmd.addPathDir("C:/Users/wjbr/scoop/apps/vcpkg/current/installed/x64-windows/bin");
+            // Prepend vcpkg's bin dir to PATH so raylib.dll is found at run time.
+            // (Run.addPathDir was removed in Zig 0.17; edit the env map directly.)
+            const vcpkg_bin = "C:/Users/wjbr/scoop/apps/vcpkg/current/installed/x64-windows/bin";
+            const env = run_cmd.getEnvMap();
+            const new_path = if (env.get("PATH")) |old|
+                b.fmt("{s};{s}", .{ vcpkg_bin, old })
+            else
+                vcpkg_bin;
+            env.put("PATH", new_path) catch @panic("OOM");
         }
-        if (b.args) |args| run_cmd.addArgs(args);
+        run_cmd.addPassthruArgs(); // zig build run-foo -- arg1 arg2
 
         const run_step = b.step("run-" ++ name, "Run " ++ name);
         run_step.dependOn(&run_cmd.step);
