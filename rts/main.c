@@ -129,7 +129,7 @@ static float camScale = 35.0f;
 static Vector3 camFocus = {0, 0, 0};
 
 Vector3 ScreenToGround(Vector2 screenPos, Camera3D camera) {
-    Ray ray = GetMouseRay(screenPos, camera);
+    Ray ray = GetScreenToWorldRay(screenPos, camera);
     float t = -ray.position.y / ray.direction.y;
     if (t < 0) t = 0;
     return Vector3Add(ray.position, Vector3Scale(ray.direction, t));

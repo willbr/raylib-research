@@ -459,7 +459,7 @@ float PrefabCenterY(Part *parts, int count, Vector3 scale) {
 
 // Raycast ground plane from mouse position
 Vector3 MouseToGround(Camera3D camera) {
-    Ray ray = GetMouseRay(GetMousePosition(), camera);
+    Ray ray = GetScreenToWorldRay(GetMousePosition(), camera);
     // Intersect with y=0 plane
     if (fabsf(ray.direction.y) < 0.0001f) return (Vector3){0,0,0};
     float t = -ray.position.y / ray.direction.y;
@@ -469,7 +469,7 @@ Vector3 MouseToGround(Camera3D camera) {
 
 // Raycast to specific height plane
 Vector3 MouseToPlane(Camera3D camera, float planeY) {
-    Ray ray = GetMouseRay(GetMousePosition(), camera);
+    Ray ray = GetScreenToWorldRay(GetMousePosition(), camera);
     if (fabsf(ray.direction.y) < 0.0001f) return (Vector3){0,planeY,0};
     float t = (planeY - ray.position.y) / ray.direction.y;
     if (t < 0) return (Vector3){0,planeY,0};

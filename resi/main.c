@@ -823,7 +823,7 @@ draw:
         if (rooms[player.currentRoom].isDark) {
             DrawRectangle(0, 0, sw, sh, (Color){0,0,0,140});
             // Central light spot
-            DrawCircleGradient(sw/2, sh/2, (float)(sw < sh ? sw : sh) * 0.35f,
+            DrawCircleGradient((Vector2){ sw/2.0f, sh/2.0f }, (float)(sw < sh ? sw : sh) * 0.35f,
                 (Color){0,0,0,0}, (Color){0,0,0,0});
         }
 
